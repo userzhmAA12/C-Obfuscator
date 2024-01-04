@@ -23,10 +23,10 @@ static void replace_suffix(std::string &fn, std::string with)
 static bool can_obfuscate(std::string &fn)
 {
     if(fn=="main")return false;
-    else if(fn == "at")return false;
-    else if(fn == "size")return false;
-    else if (fn == "append")return false;
-    else if(fn == "remove_prefix")return false;
+    //else if(fn == "at")return false;
+    //else if(fn == "size")return false;
+    //else if (fn == "append")return false;
+    //else if(fn == "remove_prefix")return false;
     return true; 
 }
 
@@ -318,7 +318,9 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             return true;
         if (_ctx->getSourceManager().isInSystemHeader(ME->getMemberLoc()))
             return true;
-        //std::cout << ME->getMemberNameInfo().getAsString() << "\n";
+        if (_ctx->getSourceManager().isInSystemHeader(ME->getMemberDecl()->getLocation()))
+            return true;
+        std::cout << ME->getMemberNameInfo().getAsString() << "\n";
         std::string mem_name = ME->getMemberNameInfo().getAsString();
         if(mem_name.length()==0)return true;
         if (!can_obfuscate(mem_name))
