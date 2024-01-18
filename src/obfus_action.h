@@ -212,13 +212,26 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if (_ctx->getSourceManager().isInSystemHeader(s->getLocation()))
             return true;
         std::string expr_name = s->getNameInfo().getAsString();
+        // std::cout << expr_name << "\n"; 
         if(expr_name.length()==0)return true;
-        //std::cout << expr_name << "\n";
+        // std::cout << expr_name << "\n";
         //s->dump();
         if(data.count(expr_name)==1&&data[expr_name]!="ignore")
         {
             clang::SourceRange SR = s->getNameInfo().getSourceRange();
-            _rewriter.ReplaceText(SR, data[expr_name]);
+            clang::SourceManager &SM = _ctx->getSourceManager();
+            // SR.getBegin().dump(SM);
+            unsigned line = SM.getSpellingLineNumber(SR.getBegin());
+            unsigned column = SM.getSpellingColumnNumber(SR.getBegin());
+            // std::cout << line << " " << column << "\n";
+            const clang::FileEntry *FE = SM.getFileEntryForID(SM.getMainFileID());
+            clang::SourceLocation StartLoc = SM.translateFileLineCol(FE, line, column);
+            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(expr_name.size()-1);
+            clang::SourceRange N_SR(StartLoc, EndLoc);
+            // std::cout << _ctx->getSourceManager().isMacroArgExpansion(SR.getBegin()) << "\n";
+            // std::cout << _rewriter.getRewrittenText(N_SR) << "\n";
+            if(_rewriter.getRewrittenText(N_SR)==expr_name)
+                _rewriter.ReplaceText(N_SR ,data[expr_name]);
         }
         return true;
     }
@@ -320,7 +333,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             return true;
         if (_ctx->getSourceManager().isInSystemHeader(ME->getMemberDecl()->getLocation()))
             return true;
-        std::cout << ME->getMemberNameInfo().getAsString() << "\n";
+        // std::cout << ME->getMemberNameInfo().getAsString() << "\n";
         std::string mem_name = ME->getMemberNameInfo().getAsString();
         if(mem_name.length()==0)return true;
         if (!can_obfuscate(mem_name))
@@ -347,6 +360,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 {
                     //std::cout << mem_name << "\n";
                     clang::SourceLocation startLoc = initializer->getMemberLocation();
+                    
                     if(startLoc.isValid())
                     {
                         clang::SourceLocation endLoc = startLoc.getLocWithOffset(mem_name.size()-1);
