@@ -1,7 +1,7 @@
 #ifndef OBFUS_ACTION_H
 #define OBFUS_ACTION_H
 
-
+#include "scan_action.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -15,21 +15,6 @@
 
 namespace obfuscator
 {
-static void replace_suffix(std::string &fn, std::string with)
-{
-    int index = fn.find_last_of(".");
-    fn        = fn.substr(0, index) + with;
-}
-static bool can_obfuscate(std::string &fn)
-{
-    if(fn=="main")return false;
-    //else if(fn == "at")return false;
-    //else if(fn == "size")return false;
-    //else if (fn == "append")return false;
-    //else if(fn == "remove_prefix")return false;
-    return true; 
-}
-
 class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
 {
   public:
@@ -73,159 +58,97 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         fin.close();
     }
 
-    bool VisitFunctionDecl(clang::FunctionDecl *func_decl) //处理函数名混淆
+    bool VisitFunctionDecl(clang::FunctionDecl *FD) //处理函数名混淆
     {
+        
         // skip the function from included file
-        if (!_ctx->getSourceManager().isInMainFile(func_decl->getLocation()))
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        if(SM.isInSystemHeader(FD->getLocation()))
             return true;
-        if (_ctx->getSourceManager().isInSystemHeader(func_decl->getLocation()))
+        // std::cout << "Start1\n";
+        std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(FD->getLocation())).getPointer()->getName().str();
+        // std::cout << loc_file << "\n";
+        std::filesystem::path path(info_path);// variable_replace.txt path
+        std::filesystem::path folder_path = path.parent_path();// project path
+        if(!is_prefix(loc_file, folder_path))
             return true;
-        std::string func_name = func_decl->getNameAsString();
+        std::string func_name = FD->getNameAsString();
         if(func_name.length()==0)return true;
         if (!can_obfuscate(func_name))
         {
             return true;
         }
-        if(data.count(func_name) == 0)
+        if(data.count(func_name)==1 && data[func_name]!="ignore")
         {
-            ++count_func;
-            if(func_name.substr(0, 8) != "operator")
-            {
-                data.insert(std::pair<std::string, std::string>(func_name, "Function"+std::to_string(count_func)));
-                clang::SourceRange SR = func_decl->getNameInfo().getSourceRange();
-                std::cout << "func: "<< func_name << " is replaced by " << "Function" << std::to_string(count_func) << "\n";
-                _rewriter.ReplaceText(SR, "Function"+std::to_string(count_func));
-                std::ofstream fout(info_path, std::ios::app);
-                if(!fout)
-                {   
-                    std::cout << "[error]open file:" << info_path << " failed!\n";
-                    exit(-1);
-                }
-                fout << "Func " << func_name << " " << "Function" << std::to_string(count_func) << "\n";
-                fout.close();
-            }
+            std::cout << func_name << "\n";
+            clang::SourceRange SR = FD->getNameInfo().getSourceRange();
+            if(_rewriter.getRewrittenText(SR)==func_name)
+                _rewriter.ReplaceText(SR, data[func_name]);
         }
-        else if(data[func_name]!="ignore")
-        {
-            clang::SourceRange SR = func_decl->getNameInfo().getSourceRange();
-            _rewriter.ReplaceText(SR, data[func_name]);
-        }
-        /*
-        //处理返回值
-        std::string ret_type = func_decl->getReturnType().getAsString();
-        std::cout << ret_type << "\n";
-        //去除前缀const 和 数组后缀
-        int pos = ret_type.find("[");
-        if(pos!=std::string::npos)
-            ret_type = ret_type.substr(0, pos);
-        pos = ret_type.find("const ");
-        if(pos==0)
-            ret_type = ret_type.substr(pos+6);
-        pos = ret_type.find("_Bool");
-        while(pos!=std::string::npos)
-        {
-            ret_type.replace(pos, 5, "bool");
-            pos = ret_type.find("_Bool");
-        }
-        int length = ret_type.length();
-        for(auto key : data1)
-        {
-            int findpos = ret_type.find(key.first);
-            while(findpos!=std::string::npos)
-            {
-                ret_type.replace(findpos, key.first.size(), key.second);
-                findpos = ret_type.find(key.first);
-            }
-        }
-        _rewriter.ReplaceText(func_decl->getReturnTypeSourceRange(), ret_type);
-        */
-        //func_decl->dump();
         return true;
     }
 
-    bool VisitVarDecl(clang::VarDecl *var_decl) //处理变量名混淆
+    bool VisitVarDecl(clang::VarDecl *VD) //处理变量名混淆
     {
-        if (!_ctx->getSourceManager().isInMainFile(var_decl->getLocation()))
+        
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        if(SM.isInSystemHeader(VD->getLocation()))
             return true;
-        if (_ctx->getSourceManager().isInSystemHeader(var_decl->getLocation()))
+        // std::cout << "Start2\n";
+        std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(VD->getLocation())).getPointer()->getName().str();
+        // std::cout << loc_file << "\n";
+        std::filesystem::path path(info_path);// variable_replace.txt path
+        std::filesystem::path folder_path = path.parent_path();// project path
+        if(!is_prefix(loc_file, folder_path))
             return true;
         
-        std::string var_name = var_decl->getNameAsString();
-        std::string var_type = var_decl->getType().getAsString();
+        std::string var_name = VD->getNameAsString();
+        std::string var_type = VD->getType().getAsString();
         if(var_name.length()==0)return true;
-        if(data.count(var_name)==0)
+        if(data.count(var_name)==1 && data[var_name]!="ignore")
         {
-            ++count_var;
-            clang::SourceLocation ST = var_decl->getLocation();
-            data.insert(std::pair<std::string, std::string>(var_decl->getNameAsString(), "Variable"+std::to_string(count_var)));
-            std::cout << "var: " << var_name << " is replaced by " << "Variable" << std::to_string(count_var) << "\n";
-            _rewriter.ReplaceText(ST, var_name.length(), "Variable"+std::to_string(count_var));
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Var " << var_name << " " << "Variable" << std::to_string(count_var) << std::endl;
-            fout.close();
+            clang::SourceLocation StartLoc = VD->getLocation();
+            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(var_name.length()-1);
+            clang::SourceRange SR(StartLoc, EndLoc);
+            if(_rewriter.getRewrittenText(SR)==var_name)
+                _rewriter.ReplaceText(SR, data[var_name]);
         }
-        else if(data[var_name]!="ignore")
-        {
-            clang::SourceLocation ST = var_decl->getLocation();
-            _rewriter.ReplaceText(ST, var_name.length(), data[var_name]);
-        }
-        /*
-        std::cout << var_type << "\n";
-        //去除前缀const 和 数组后缀
-        int pos = var_type.find("[");
-        if(pos!=std::string::npos)
-            var_type = var_type.substr(0, pos);
-        pos = var_type.find("const ");
-        if(pos==0)
-            var_type = var_type.substr(pos+6);
-        pos = var_type.find("_Bool");
-        while(pos!=std::string::npos)
-        {
-            var_type.replace(pos, 5, "bool");
-            pos = var_type.find("_Bool");
-        }
-        int length = var_type.length();
-        for(auto key : data1)
-        {
-            int findpos = var_type.find(key.first);
-            while(findpos!=std::string::npos)
-            {
-                var_type.replace(findpos, key.first.size(), key.second);
-                findpos = var_type.find(key.first);
-            }
-        }
-        
-        if(var_type.find("struct")!=0)_rewriter.ReplaceText(var_decl->getTypeSpecStartLoc(), length, var_type);
-        */
-        //var_decl->dump();
         return true;
     }
-    bool VisitDeclRefExpr(clang::DeclRefExpr* s) 
+    bool VisitDeclRefExpr(clang::DeclRefExpr* DRE) 
     {
-        if (!_ctx->getSourceManager().isInMainFile(s->getLocation()))
+        
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        if(SM.isInSystemHeader(DRE->getLocation()))
             return true;
-        if (_ctx->getSourceManager().isInSystemHeader(s->getLocation()))
+        if(SM.isInSystemHeader(DRE->getDecl()->getLocation()))
             return true;
-        std::string expr_name = s->getNameInfo().getAsString();
-        // std::cout << expr_name << "\n"; 
+        // std::cout << "Start3\n";
+        std::string expr_name = DRE->getNameInfo().getAsString();
+        
+        std::filesystem::path path(info_path);// variable_replace.txt path
+        std::filesystem::path folder_path = path.parent_path();// project path
+        // std::cout << SM.getFileID(DRE->getLocation()).isInvalid() << "\n";
+        if(SM.getFileID(DRE->getLocation()).isInvalid())
+            return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(DRE->getLocation()))).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(DRE->getLocation()))).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
+        
         if(expr_name.length()==0)return true;
         // std::cout << expr_name << "\n";
-        //s->dump();
+        //DRE->dump();
         if(data.count(expr_name)==1&&data[expr_name]!="ignore")
         {
-            clang::SourceRange SR = s->getNameInfo().getSourceRange();
-            clang::SourceManager &SM = _ctx->getSourceManager();
+            std::cout << expr_name << " " << data[expr_name] <<"\n";
+            clang::SourceRange SR = DRE->getNameInfo().getSourceRange();
             // SR.getBegin().dump(SM);
-            unsigned line = SM.getSpellingLineNumber(SR.getBegin());
-            unsigned column = SM.getSpellingColumnNumber(SR.getBegin());
-            // std::cout << line << " " << column << "\n";
-            const clang::FileEntry *FE = SM.getFileEntryForID(SM.getMainFileID());
-            clang::SourceLocation StartLoc = SM.translateFileLineCol(FE, line, column);
+            clang::SourceLocation StartLoc = SM.getSpellingLoc(SR.getBegin());
             clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(expr_name.size()-1);
             clang::SourceRange N_SR(StartLoc, EndLoc);
             // std::cout << _ctx->getSourceManager().isMacroArgExpansion(SR.getBegin()) << "\n";
@@ -238,103 +161,71 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
 
     bool VisitCXXRecordDecl(clang::CXXRecordDecl *RD) //处理自定义类的类名混淆
     {
-        if (!_ctx->getSourceManager().isInMainFile(RD->getLocation()))
-            return true;
-        if (_ctx->getSourceManager().isInSystemHeader(RD->getLocation()))
-            return true;
-        std::string record_name = RD->getNameAsString();
-        if(record_name.length()==0)return true;
-        if (data.count(record_name)==0) {
-            ++count_var;
-            //clang::SourceLocation ST = RD->getLocation();
-            data.insert(std::pair<std::string, std::string>(RD->getNameAsString(), "ignore"));
-            data.insert(std::pair<std::string, std::string>("~"+RD->getNameAsString(), "ignore"));
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Class " << record_name << " " << "Variable" << std::to_string(count_var) << "\n";
-            fout.close();
-        }
-        /*else
-        {
-            clang::SourceLocation ST = RD->getLocation();
-            _rewriter.ReplaceText(ST, record_name.size(), data[record_name]);
-        }*/
         return true;
     }
     bool VisitFieldDecl(clang::FieldDecl *FD) 
     {
-        if (!_ctx->getSourceManager().isInMainFile(FD->getLocation()))
+        
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        if(SM.isInSystemHeader(FD->getLocation()))
             return true;
-        if (_ctx->getSourceManager().isInSystemHeader(FD->getLocation()))
+        // std::cout << "Start4\n";
+        std::string loc_file = SM.getFileEntryForID(SM.getFileID(FD->getLocation()))->getName().str();
+        // std::cout << loc_file << "\n";
+        std::filesystem::path path(info_path);// variable_replace.txt path
+        std::filesystem::path folder_path = path.parent_path();// project path
+        if(!is_prefix(loc_file, folder_path))
             return true;
         std::string record_name = FD->getNameAsString();
         std::string var_type = FD->getType().getAsString();
         if(record_name.length()==0)return true;
-        if (data.count(record_name)==0) 
+        if(data.count(record_name)==1 && data[record_name]!="ignore")
         {
-            ++count_var;
-            clang::SourceLocation ST = FD->getLocation();
-            data.insert(std::pair<std::string, std::string>(FD->getNameAsString(), "Variable"+std::to_string(count_var)));
-            std::cout << "var: " << record_name << " is repalced by " << "Variable" << std::to_string(count_var) << "\n";
-            _rewriter.ReplaceText(ST, record_name.size(), "Variable"+std::to_string(count_var));
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Var " << record_name << " " << "Variable" << std::to_string(count_var) << "\n";
-            fout.close();
+            clang::SourceLocation StartLoc = FD->getLocation();
+            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(record_name.length()-1);
+            clang::SourceRange SR(StartLoc, EndLoc);
+            if(_rewriter.getRewrittenText(SR)==record_name)
+                _rewriter.ReplaceText(SR, data[record_name]);
         }
-        else if(data[record_name]!="ignore")
-        {
-            clang::SourceLocation ST = FD->getLocation();
-            _rewriter.ReplaceText(ST, record_name.size(), data[record_name]);
-        }
-        /*
-        //std::cout << var_type << "\n";
-        //去除前缀const 和 数组后缀
-        int pos = var_type.find("[");
-        if(pos!=std::string::npos)
-            var_type = var_type.substr(0, pos);
-        pos = var_type.find("const ");
-        if(pos==0)
-            var_type = var_type.substr(pos+6);
-        pos = var_type.find("_Bool");
-        while(pos!=std::string::npos)
-        {
-            var_type.replace(pos, 5, "bool");
-            pos = var_type.find("_Bool");
-        }
-        int length = var_type.length();
-        for(auto key : data1)
-        {
-            int findpos = var_type.find(key.first);
-            while(findpos!=std::string::npos)
-            {
-                var_type.replace(findpos, key.first.size(), key.second);
-                findpos = var_type.find(key.first);
-            }
-        }
-        
-        _rewriter.ReplaceText(FD->getTypeSpecStartLoc(), length, var_type);
-       */ 
         return true;
     }
     bool VisitMemberExpr(clang::MemberExpr *ME)
     {
-        if (!_ctx->getSourceManager().isInMainFile(ME->getMemberLoc()))
+        
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        clang::SourceLocation StartLoc = ME->getMemberLoc();
+        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
+        clang::SourceLocation DeclLoc = ME->getMemberDecl()->getLocation();
+        clang::SourceLocation N_DeclLoc = SM.getSpellingLoc(DeclLoc);
+        if(SM.isInSystemHeader(StartLoc))
             return true;
-        if (_ctx->getSourceManager().isInSystemHeader(ME->getMemberLoc()))
+        if(SM.isInSystemHeader(DeclLoc))
             return true;
-        if (_ctx->getSourceManager().isInSystemHeader(ME->getMemberDecl()->getLocation()))
-            return true;
-        // std::cout << ME->getMemberNameInfo().getAsString() << "\n";
+        
+        // std::cout << "Start5\n";
+        // std::cout << SM.getSpellingLineNumber(StartLoc) << "\n";
         std::string mem_name = ME->getMemberNameInfo().getAsString();
+        // std::cout << mem_name << "\n";
+        std::filesystem::path path(info_path);// variable_replace.txt path
+        std::filesystem::path folder_path = path.parent_path();// project path
+        if(SM.getFileID(N_StartLoc).isInvalid())
+            return true;
+        else
+        {
+            std::string loc_file1 = SM.getFileEntryForID(SM.getFileID(N_StartLoc))->getName().str();
+            if(!is_prefix(loc_file1, folder_path))
+                return true;
+        }
+        if(SM.getFileID(N_DeclLoc).isInvalid())
+            return true;
+        else
+        {
+            std::string loc_file2 = SM.getFileEntryForID(SM.getFileID(N_DeclLoc))->getName().str();
+            if(!is_prefix(loc_file2, folder_path))
+                return true;
+        }
+        // std::cout << SM.getFileEntryForID(SM.getFileID(ME->getMemberDecl()->getLocation()))->getName().str() << "\n";
+        
         if(mem_name.length()==0)return true;
         if (!can_obfuscate(mem_name))
         {
@@ -342,20 +233,39 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         }
         if(data.count(mem_name)==1&&data[mem_name]!="ignore")
         {
-            _rewriter.ReplaceText(ME->getMemberLoc(), ME->getMemberNameInfo().getAsString().length(), data[mem_name]);
+            // StartLoc.dump(SM);
+            // std::cout << mem_name << "\n";
+            // std::cout << SM.getFileEntryForID(SM.getFileID(N_StartLoc))->getName().str() << "\n";
+            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(mem_name.size()-1);
+            clang::SourceRange N_SR(N_StartLoc, N_EndLoc);
+            // std::cout << _ctx->getSourceManager().isMacroArgExpansion(SR.getBegin()) << "\n";
+            // std::cout << _rewriter.getRewrittenText(N_SR) << "\n";
+            if(_rewriter.getRewrittenText(N_SR)==mem_name)
+                _rewriter.ReplaceText(N_SR, data[mem_name]);
         }
         return true;
     }
     bool VisitCXXConstructorDecl(clang::CXXConstructorDecl *CCD)
     {
-        if (!_ctx->getSourceManager().isInMainFile(CCD->getLocation()))
+        
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        if(SM.isInSystemHeader(CCD->getLocation()))
             return true;
-        if (_ctx->getSourceManager().isInSystemHeader(CCD->getLocation()))
+        // std::cout << "Start6\n";
+        std::string loc_file = SM.getFileEntryForID(SM.getFileID(CCD->getLocation()))->getName().str();
+        // std::cout << loc_file << "\n";
+        std::filesystem::path path(info_path);// variable_replace.txt path
+        std::filesystem::path folder_path = path.parent_path();// project path
+        if(!is_prefix(loc_file, folder_path))
             return true;
+        clang::SourceLocation Loc = CCD->getBeginLoc();
+        // clang::SourceManager &SM = _ctx->getSourceManager();
+        // Loc.dump(SM);
         for (auto initializer : CCD->inits()) {
             if (initializer->isAnyMemberInitializer())
             {
                 std::string mem_name = initializer->getMember()->getNameAsString();
+                // std::cout << mem_name << "\n";
                 if(data.count(mem_name)==1&&data[mem_name]!="ignore")
                 {
                     //std::cout << mem_name << "\n";
@@ -363,8 +273,11 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                     
                     if(startLoc.isValid())
                     {
+                        // startLoc.dump(SM);
                         clang::SourceLocation endLoc = startLoc.getLocWithOffset(mem_name.size()-1);
-                        _rewriter.ReplaceText(clang::SourceRange(startLoc, endLoc), data[mem_name]);
+                        clang::SourceRange N_SR = clang::SourceRange(startLoc, endLoc);
+                        if(_rewriter.getRewrittenText(N_SR)==mem_name)
+                            _rewriter.ReplaceText(N_SR, data[mem_name]);
                     }
                 }
             }
@@ -376,7 +289,6 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     clang::Rewriter &_rewriter;
     std::string &info_path;
     std::map<std::string, std::string> data; //储存函数名和变量名的替换信息
-    //std::map<std::string, std::string> data1; //储存类名的替换信息
     int count_func;
     int count_var;
     
@@ -434,16 +346,23 @@ class ObfusFrontendAction : public clang::ASTFrontendAction
         //              << "\n";
         //
         std::error_code ec;
-        std::string file_name =
-            SM.getFileEntryForID(SM.getMainFileID())->getName().str();
-        // std::cout << "** file_name: " << file_name << "\n";
-        std::string repalced;
-        repalced = file_name.substr(file_name.rfind("."), file_name.length());
-        std::cout << repalced << "\n";
-        replace_suffix(file_name, "-obfuscated"+repalced);
-        llvm::raw_fd_stream fd(file_name, ec);
-        // _rewriter.getEditBuffer(SM.getMainFileID()).write(llvm::outs());
-        _rewriter.getEditBuffer(SM.getMainFileID()).write(fd);
+        std::filesystem::path path(info_path);// variable_replace.txt path
+        std::filesystem::path folder_path = path.parent_path();// project path
+        std::cout << "finish2\n";
+        for (auto it = SM.fileinfo_begin(); it != SM.fileinfo_end(); ++it) {
+            const clang::FileEntryRef& fileEntryRef = it->first;
+            std::string file_name = fileEntryRef.getName().str();
+            if(is_prefix(file_name, folder_path))
+            {
+                std::string repalced;
+                repalced = file_name.substr(file_name.rfind("."), file_name.length());
+                std::cout << repalced << "\n";
+                replace_suffix(file_name, "-obfuscated"+repalced);
+                llvm::raw_fd_stream fd(file_name, ec);
+                // _rewriter.getEditBuffer(SM.getMainFileID()).write(llvm::outs());
+                _rewriter.getEditBuffer(SM.translateFile(fileEntryRef)).write(fd);
+            }
+        }
     }
 
   private:
