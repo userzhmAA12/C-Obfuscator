@@ -34,6 +34,7 @@ make
 ./C-Obfuscator /home/zhm/C-Obfuscator/tests/build/compile_commands.json /home/zhm/C-Obfuscator/variable_replace.txt
 # 利用compile_commands.json将源程序编译为AST，第一个参数为compile_commands.json的路径
 # 最后一个参数为源程序对应的变量名替换记录的路径。
+# 两个参数的路径需要在代混淆项目的最上级目录下，因为最后混淆文件替换源文件的操作需要按照这两个路径来扫描待混淆项目文件夹
 ```
 
 ## Clang编译命令
