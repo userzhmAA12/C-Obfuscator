@@ -1,6 +1,6 @@
 # C-Obfuscator
 
-`C-Obfuscator`通过对源码编译生成的Clang AST进行分析，利用Clang Tool中的`Rewrite`进行源码的修改，并输出切片后的C程序。
+`C-Obfuscator`通过对源码编译生成的Clang AST进行分析，利用Clang Tool中的`Rewrite`进行源码的修改，并输出混淆后的C程序。混淆主要进行源码中变量名和函数名的混淆，目前对宏的处理仍存在问题。
 
 
 ## 环境依赖
