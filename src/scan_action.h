@@ -85,12 +85,18 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(FD->getLocation()))
             return true;
-        std::string loc_file = SM.getFileEntryForID(SM.getFileID(FD->getLocation()))->getName().str();
-        std::cout << loc_file << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(FD->getLocation()).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         std::string func_name = FD->getNameAsString();
         if(func_name.length()==0)return true;
         if (!can_obfuscate(func_name))
@@ -122,12 +128,18 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(VD->getLocation()))
             return true;
-        std::string loc_file = SM.getFileEntryForID(SM.getFileID(VD->getLocation()))->getName().str();
-        std::cout << loc_file << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(VD->getLocation()).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation()))).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation()))).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         
         std::string var_name = VD->getNameAsString();
         std::string var_type = VD->getType().getAsString();
@@ -157,12 +169,18 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(RD->getLocation()))
             return true;
-        std::string loc_file = SM.getFileEntryForID(SM.getFileID(RD->getLocation()))->getName().str();
-        std::cout << loc_file << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(RD->getLocation()).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation()))).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation()))).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         std::string record_name = RD->getNameAsString();
         if(record_name.length()==0)return true;
         if (data.count(record_name)==0) {
@@ -185,12 +203,18 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(FD->getLocation()))
             return true;
-        std::string loc_file = SM.getFileEntryForID(SM.getFileID(FD->getLocation()))->getName().str();
-        std::cout << loc_file << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(FD->getLocation()).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         std::string record_name = FD->getNameAsString();
         std::string var_type = FD->getType().getAsString();
         if(record_name.length()==0)return true;

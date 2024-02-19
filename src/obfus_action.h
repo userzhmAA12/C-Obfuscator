@@ -63,15 +63,23 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         
         // skip the function from included file
         clang::SourceManager &SM = _ctx->getSourceManager();
-        if(SM.isInSystemHeader(FD->getLocation()))
+        clang::SourceLocation StartLoc = FD->getLocation();
+        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
+        if(SM.isInSystemHeader(StartLoc))
             return true;
         // std::cout << "Start1\n";
-        std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(FD->getLocation())).getPointer()->getName().str();
-        // std::cout << loc_file << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         std::string func_name = FD->getNameAsString();
         if(func_name.length()==0)return true;
         if (!can_obfuscate(func_name))
@@ -80,8 +88,9 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         }
         if(data.count(func_name)==1 && data[func_name]!="ignore")
         {
-            std::cout << func_name << "\n";
-            clang::SourceRange SR = FD->getNameInfo().getSourceRange();
+            // std::cout << func_name << "\n";
+            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(func_name.length()-1);
+            clang::SourceRange SR(N_StartLoc, N_EndLoc);
             if(_rewriter.getRewrittenText(SR)==func_name)
                 _rewriter.ReplaceText(SR, data[func_name]);
         }
@@ -92,24 +101,32 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     {
         
         clang::SourceManager &SM = _ctx->getSourceManager();
-        if(SM.isInSystemHeader(VD->getLocation()))
+        clang::SourceLocation StartLoc = VD->getLocation();
+        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
+        if(SM.isInSystemHeader(StartLoc))
             return true;
         // std::cout << "Start2\n";
-        std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(VD->getLocation())).getPointer()->getName().str();
-        // std::cout << loc_file << "\n";
+        
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         
         std::string var_name = VD->getNameAsString();
         std::string var_type = VD->getType().getAsString();
         if(var_name.length()==0)return true;
         if(data.count(var_name)==1 && data[var_name]!="ignore")
         {
-            clang::SourceLocation StartLoc = VD->getLocation();
-            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(var_name.length()-1);
-            clang::SourceRange SR(StartLoc, EndLoc);
+            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(var_name.length()-1);
+            clang::SourceRange SR(N_StartLoc, N_EndLoc);
             if(_rewriter.getRewrittenText(SR)==var_name)
                 _rewriter.ReplaceText(SR, data[var_name]);
         }
@@ -119,9 +136,13 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     {
         
         clang::SourceManager &SM = _ctx->getSourceManager();
-        if(SM.isInSystemHeader(DRE->getLocation()))
+        clang::SourceLocation StartLoc = DRE->getLocation();
+        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
+        clang::SourceLocation DeclLoc = DRE->getDecl()->getLocation();
+        clang::SourceLocation N_DeclLoc = SM.getSpellingLoc(DeclLoc);
+        if(SM.isInSystemHeader(StartLoc))
             return true;
-        if(SM.isInSystemHeader(DRE->getDecl()->getLocation()))
+        if(SM.isInSystemHeader(DeclLoc))
             return true;
         // std::cout << "Start3\n";
         std::string expr_name = DRE->getNameInfo().getAsString();
@@ -129,14 +150,24 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         // std::cout << SM.getFileID(DRE->getLocation()).isInvalid() << "\n";
-        if(SM.getFileID(DRE->getLocation()).isInvalid())
+        if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
         else
         {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(DRE->getLocation()))).has_value())
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).has_value())
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(DRE->getLocation()))).getPointer()->getName().str();
-            if(!is_prefix(loc_file, folder_path))
+            std::string loc_file1 = SM.getFileEntryForID(SM.getFileID(N_StartLoc))->getName().str();
+            if(!is_prefix(loc_file1, folder_path))
+                return true;
+        }
+        if(SM.getFileID(N_DeclLoc).isInvalid())
+            return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc)).has_value())
+                return true;
+            std::string loc_file2 = SM.getFileEntryForID(SM.getFileID(N_DeclLoc))->getName().str();
+            if(!is_prefix(loc_file2, folder_path))
                 return true;
         }
         
@@ -145,12 +176,11 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         //DRE->dump();
         if(data.count(expr_name)==1&&data[expr_name]!="ignore")
         {
-            std::cout << expr_name << " " << data[expr_name] <<"\n";
+            // std::cout << expr_name << " " << data[expr_name] <<"\n";
             clang::SourceRange SR = DRE->getNameInfo().getSourceRange();
             // SR.getBegin().dump(SM);
-            clang::SourceLocation StartLoc = SM.getSpellingLoc(SR.getBegin());
-            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(expr_name.size()-1);
-            clang::SourceRange N_SR(StartLoc, EndLoc);
+            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(expr_name.size()-1);
+            clang::SourceRange N_SR(N_StartLoc, N_EndLoc);
             // std::cout << _ctx->getSourceManager().isMacroArgExpansion(SR.getBegin()) << "\n";
             // std::cout << _rewriter.getRewrittenText(N_SR) << "\n";
             if(_rewriter.getRewrittenText(N_SR)==expr_name)
@@ -167,23 +197,30 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     {
         
         clang::SourceManager &SM = _ctx->getSourceManager();
-        if(SM.isInSystemHeader(FD->getLocation()))
+        clang::SourceLocation StartLoc = FD->getLocation();
+        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
+        if(SM.isInSystemHeader(StartLoc))
             return true;
         // std::cout << "Start4\n";
-        std::string loc_file = SM.getFileEntryForID(SM.getFileID(FD->getLocation()))->getName().str();
-        // std::cout << loc_file << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         std::string record_name = FD->getNameAsString();
         std::string var_type = FD->getType().getAsString();
         if(record_name.length()==0)return true;
         if(data.count(record_name)==1 && data[record_name]!="ignore")
         {
-            clang::SourceLocation StartLoc = FD->getLocation();
-            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(record_name.length()-1);
-            clang::SourceRange SR(StartLoc, EndLoc);
+            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(record_name.length()-1);
+            clang::SourceRange SR(N_StartLoc, N_EndLoc);
             if(_rewriter.getRewrittenText(SR)==record_name)
                 _rewriter.ReplaceText(SR, data[record_name]);
         }
@@ -212,6 +249,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             return true;
         else
         {
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)).has_value())
+                return true;
             std::string loc_file1 = SM.getFileEntryForID(SM.getFileID(N_StartLoc))->getName().str();
             if(!is_prefix(loc_file1, folder_path))
                 return true;
@@ -220,6 +259,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             return true;
         else
         {
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc)).has_value())
+                return true;
             std::string loc_file2 = SM.getFileEntryForID(SM.getFileID(N_DeclLoc))->getName().str();
             if(!is_prefix(loc_file2, folder_path))
                 return true;
@@ -252,12 +293,18 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(SM.isInSystemHeader(CCD->getLocation()))
             return true;
         // std::cout << "Start6\n";
-        std::string loc_file = SM.getFileEntryForID(SM.getFileID(CCD->getLocation()))->getName().str();
-        // std::cout << loc_file << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
-        if(!is_prefix(loc_file, folder_path))
+        if(SM.getFileID(CCD->getLocation()).isInvalid())
             return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(CCD->getLocation()))).has_value())
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(CCD->getLocation()))).getPointer()->getName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
         clang::SourceLocation Loc = CCD->getBeginLoc();
         // clang::SourceManager &SM = _ctx->getSourceManager();
         // Loc.dump(SM);
@@ -356,7 +403,7 @@ class ObfusFrontendAction : public clang::ASTFrontendAction
             {
                 std::string repalced;
                 repalced = file_name.substr(file_name.rfind("."), file_name.length());
-                std::cout << repalced << "\n";
+                // std::cout << repalced << "\n";
                 replace_suffix(file_name, "-obfuscated"+repalced);
                 llvm::raw_fd_stream fd(file_name, ec);
                 // _rewriter.getEditBuffer(SM.getMainFileID()).write(llvm::outs());

@@ -72,7 +72,7 @@ int main(int argc, const char **argv)
         //fs::create_directory(new_folder);
     for (const auto &entry1 : fs::recursive_directory_iterator(dir_path))
     {
-        if ((entry1.path().extension() == ".h" || entry1.path().extension() == ".hh" || entry1.path().extension()==".c" || entry1.path().extension()==".cpp") )
+        if ((entry1.path().extension() == ".h" || entry1.path().extension() == ".hh" || entry1.path().extension() == ".hpp" || entry1.path().extension()==".c" || entry1.path().extension()==".cpp") )
         {
             size_t pos = entry1.path().stem().string().find("-obfuscated");
             if(pos!=std::string::npos)

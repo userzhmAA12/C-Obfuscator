@@ -32,7 +32,7 @@ make
 ./C-Obfuscator [compile_commands.json PATH] [variable_replaced.txt PATH]
 # 示例
 ./C-Obfuscator /home/zhm/C-Obfuscator/tests/build/compile_commands.json /home/zhm/C-Obfuscator/variable_replace.txt
-# 利用compile_commands.json将源程序编译为AST。
+# 利用compile_commands.json将源程序编译为AST，第一个参数为compile_commands.json的路径
 # 最后一个参数为源程序对应的变量名替换记录的路径。
 ```
 
