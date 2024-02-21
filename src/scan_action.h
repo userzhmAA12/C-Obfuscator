@@ -91,9 +91,9 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             return true;
         else
         {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).has_value())
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).getPointer()->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation())))->getName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
@@ -134,9 +134,9 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             return true;
         else
         {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation()))).has_value())
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation()))))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation()))).getPointer()->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation())))->getName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
@@ -175,9 +175,9 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             return true;
         else
         {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation()))).has_value())
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation()))))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation()))).getPointer()->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation())))->getName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
@@ -209,9 +209,9 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             return true;
         else
         {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).has_value())
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))).getPointer()->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation())))->getName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
