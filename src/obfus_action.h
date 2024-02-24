@@ -54,6 +54,11 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 //data1.insert(std::pair<std::string, std::string>(pre_name, after_name));
                 //data.insert(std::pair<std::string, std::string>("struct " + pre_name + "*", "struct " + after_name + "*"));
             }
+            else if(op == "Macro")
+            {
+                fin >> pre_name;
+                data[pre_name] = "ignore";
+            }
         }
         fin.close();
     }
@@ -76,7 +81,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
@@ -115,7 +120,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
@@ -156,7 +161,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
                 return true;
-            std::string loc_file1 = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getName().str();
+            std::string loc_file1 = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file1, folder_path))
                 return true;
         }
@@ -166,7 +171,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc)).has_value())
                 return true;
-            std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getName().str();
+            std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file2, folder_path))
                 return true;
         }
@@ -210,7 +215,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
@@ -252,7 +257,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             
             if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
                 return true;
-            std::string loc_file1 = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getName().str();
+            std::string loc_file1 = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file1, folder_path))
                 return true;
         }
@@ -262,7 +267,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc)))
                 return true;
-            std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getName().str();
+            std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file2, folder_path))
                 return true;
         }
@@ -302,7 +307,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(CCD->getLocation()))))
                 return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(CCD->getLocation())))->getName().str();
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(CCD->getLocation())))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
@@ -399,7 +404,9 @@ class ObfusFrontendAction : public clang::ASTFrontendAction
         std::cout << "finish2\n";
         for (auto it = SM.fileinfo_begin(); it != SM.fileinfo_end(); ++it) {
             const clang::FileEntryRef& fileEntryRef = it->first;
-            std::string file_name = fileEntryRef.getName().str();
+            
+            std::string file_name = fileEntryRef.getFileEntry().tryGetRealPathName().str();
+            // std::cout << file_name << "\n";
             if(is_prefix(file_name, folder_path))
             {
                 std::string repalced;
