@@ -151,7 +151,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             return true;
         // std::cout << "Start3\n";
         std::string expr_name = DRE->getNameInfo().getAsString();
-        
+        if(expr_name.length()==0)return true;
+        // std::cout << expr_name << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         // std::cout << SM.getFileID(DRE->getLocation()).isInvalid() << "\n";
@@ -176,8 +177,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 return true;
         }
         
-        if(expr_name.length()==0)return true;
-        // std::cout << expr_name << "\n";
+        
+        
         //DRE->dump();
         if(data.count(expr_name)==1&&data[expr_name]!="ignore")
         {
@@ -247,7 +248,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         // std::cout << "Start5\n";
         // std::cout << SM.getSpellingLineNumber(StartLoc) << "\n";
         std::string mem_name = ME->getMemberNameInfo().getAsString();
-        // std::cout << mem_name << "\n";
+        if(mem_name.length()==0)return true;
+        std::cout << mem_name << "\n";
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         if(SM.getFileID(N_StartLoc).isInvalid())
@@ -273,7 +275,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         }
         // std::cout << SM.getFileEntryForID(SM.getFileID(ME->getMemberDecl()->getLocation()))->getName().str() << "\n";
         
-        if(mem_name.length()==0)return true;
+        
         if (!can_obfuscate(mem_name))
         {
             return true;
@@ -287,6 +289,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             clang::SourceRange N_SR(N_StartLoc, N_EndLoc);
             // std::cout << _ctx->getSourceManager().isMacroArgExpansion(SR.getBegin()) << "\n";
             // std::cout << _rewriter.getRewrittenText(N_SR) << "\n";
+            std::cout << _rewriter.getRewrittenText(N_SR) << "\n";
             if(_rewriter.getRewrittenText(N_SR)==mem_name)
                 _rewriter.ReplaceText(N_SR, data[mem_name]);
         }

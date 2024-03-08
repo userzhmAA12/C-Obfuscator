@@ -90,6 +90,21 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(FD->getLocation()))
             return true;
+        std::string func_name = FD->getNameAsString();
+        if(func_name.length()==0)return true;
+        if(data.count(func_name) != 0 && data[func_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
+        {
+            data[func_name] = "ignore";
+            std::ofstream fout(info_path, std::ios::app);
+            if(!fout)
+            {   
+                std::cout << "[error]open file:" << info_path << " failed!\n";
+                exit(-1);
+            }
+            fout << "Macro " << func_name << "\n";
+            fout.close();
+            return true;
+        }
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         if(SM.getFileID(FD->getLocation()).isInvalid())
@@ -102,8 +117,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
-        std::string func_name = FD->getNameAsString();
-        if(func_name.length()==0)return true;
+        
         if (!can_obfuscate(func_name))
         {
             return true;
@@ -126,18 +140,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
                 fout.close();
             }
         }
-        else if(data.count(func_name) != 0 && data[func_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
-        {
-            data[func_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << func_name << "\n";
-            fout.close();
-        }
         return true;
     }
 
@@ -146,6 +148,22 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(VD->getLocation()))
             return true;
+        std::string var_name = VD->getNameAsString();
+        // std::string var_type = VD->getType().getAsString();
+        if(var_name.length()==0)return true;
+        if(data.count(var_name)!=0 && data[var_name]!="ignore" && (SM.isMacroBodyExpansion(VD->getLocation()) || SM.isMacroArgExpansion(VD->getLocation())))
+        {
+            data[var_name] = "ignore";
+            std::ofstream fout(info_path, std::ios::app);
+            if(!fout)
+            {   
+                std::cout << "[error]open file:" << info_path << " failed!\n";
+                exit(-1);
+            }
+            fout << "Macro " << var_name << "\n";
+            fout.close();
+            return true;
+        }
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         if(SM.getFileID(VD->getLocation()).isInvalid())
@@ -159,9 +177,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
                 return true;
         }
         
-        std::string var_name = VD->getNameAsString();
-        std::string var_type = VD->getType().getAsString();
-        if(var_name.length()==0)return true;
+        
         if(data.count(var_name)==0 && !SM.isMacroBodyExpansion(VD->getLocation()) && !SM.isMacroArgExpansion(VD->getLocation()))
         {
             ++count_var;
@@ -174,18 +190,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
                 exit(-1);
             }
             fout << "Var " << var_name << " " << "Variable" << std::to_string(count_var) << std::endl;
-            fout.close();
-        }
-        else if(data.count(var_name)!=0 && data[var_name]!="ignore" && (SM.isMacroBodyExpansion(VD->getLocation()) || SM.isMacroArgExpansion(VD->getLocation())))
-        {
-            data[var_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << var_name << "\n";
             fout.close();
         }
         return true;
@@ -203,33 +207,57 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             return true;
         // std::cout << "Start3\n";
         std::string expr_name = DRE->getNameInfo().getAsString();
-        
-        std::filesystem::path path(info_path);// variable_replace.txt path
+        // std::cout << expr_name << "\n";
+        /*std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         // std::cout << SM.getFileID(DRE->getLocation()).isInvalid() << "\n";
+        // StartLoc.dump(SM);
+        // std::cout << (SM.isMacroBodyExpansion(StartLoc) || SM.isMacroArgExpansion(StartLoc)) << "\n";
         if(SM.getFileID(N_StartLoc).isInvalid())
+        {
+            std::cout << "1\n";
             return true;
+        }
         else
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
-                return true;
+            {
+                std::cout << "2\n";
+                return true;    
+            }
+            
             std::string loc_file1 = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file1, folder_path))
+            {
+                std::cout << "3\n";
                 return true;
+            }
+                
         }
         if(SM.getFileID(N_DeclLoc).isInvalid())
+        {
+            std::cout << "4\n";
             return true;
+        }
+            
         else
         {
             if(!SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc)).has_value())
+            {
+                std::cout << "5\n";
                 return true;
+            }
+                
             std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file2, folder_path))
-                return true;
-        }
+            {
+                std::cout << "6\n";return true;
+            }
+                
+        }*/
         
         if(expr_name.length()==0)return true;
-        // std::cout << expr_name << "\n";
+        
         //DRE->dump();
         if(data.count(expr_name)==1 && data[expr_name]!="ignore" && (SM.isMacroBodyExpansion(StartLoc) || SM.isMacroArgExpansion(StartLoc)))
         {
@@ -284,6 +312,22 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(FD->getLocation()))
             return true;
+        std::string record_name = FD->getNameAsString();
+        // std::string var_type = FD->getType().getAsString();
+        if(record_name.length()==0)return true;
+        if(data.count(record_name)!=0 && data[record_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
+        {
+            data[record_name] = "ignore";
+            std::ofstream fout(info_path, std::ios::app);
+            if(!fout)
+            {   
+                std::cout << "[error]open file:" << info_path << " failed!\n";
+                exit(-1);
+            }
+            fout << "Macro " << record_name << "\n";
+            fout.close();
+            return true;
+        }
         std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         if(SM.getFileID(FD->getLocation()).isInvalid())
@@ -296,9 +340,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
-        std::string record_name = FD->getNameAsString();
-        std::string var_type = FD->getType().getAsString();
-        if(record_name.length()==0)return true;
+        
         if (data.count(record_name)==0 && !SM.isMacroBodyExpansion(FD->getLocation()) && !SM.isMacroArgExpansion(FD->getLocation())) 
         {
             ++count_var;
@@ -311,18 +353,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
                 exit(-1);
             }
             fout << "Var " << record_name << " " << "Variable" << std::to_string(count_var) << "\n";
-            fout.close();
-        }
-        else if(data.count(record_name)!=0 && data[record_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
-        {
-            data[record_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << record_name << "\n";
             fout.close();
         }
         return true;
@@ -341,7 +371,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         
         std::string mem_name = ME->getMemberNameInfo().getAsString();
         // std::cout << mem_name << "\n";
-        std::filesystem::path path(info_path);// variable_replace.txt path
+        /*std::filesystem::path path(info_path);// variable_replace.txt path
         std::filesystem::path folder_path = path.parent_path();// project path
         if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
@@ -363,7 +393,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getFileEntry().tryGetRealPathName().str();
             if(!is_prefix(loc_file2, folder_path))
                 return true;
-        }
+        }*/
         // std::cout << SM.getFileEntryForID(SM.getFileID(ME->getMemberDecl()->getLocation()))->getName().str() << "\n";
         
         if(mem_name.length()==0)return true;
@@ -386,6 +416,27 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         return true;
     }
     bool VisitCXXConstructorDecl(clang::CXXConstructorDecl *CCD)
+    {
+        return true;
+    }
+    bool VisitOffsetOfExpr(clang::OffsetOfExpr *OOE)
+    {
+        std::string com_name =  OOE->getComponent(0).getFieldName()->getName().str();
+        if(data.count(com_name)==1 && data[com_name]!="ignore")
+        {
+            data[com_name] = "ignore";
+            std::ofstream fout(info_path, std::ios::app);
+            if(!fout)
+            {   
+                std::cout << "[error]open file:" << info_path << " failed!\n";
+                exit(-1);
+            }
+            fout << "Macro " << com_name << "\n";
+            fout.close();
+        }
+        return true;
+    }
+    bool VisitInitListExpr(clang::InitListExpr *ILE)
     {
         return true;
     }
