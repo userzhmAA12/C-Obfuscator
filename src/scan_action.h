@@ -12,7 +12,6 @@
 #include <clang/Tooling/Tooling.h>
 #include <iostream>
 #include <fstream>
-#include <filesystem>
 
 namespace obfuscator
 {
@@ -37,7 +36,13 @@ bool is_prefix(const std::string &str, const std::string &prefix) {
     }
     return true;
 }
-
+std::string getparentdir(const std::string& filePath) {
+    size_t pos = filePath.find_last_of("/\\");
+    if (pos != std::string::npos) {
+        return filePath.substr(0, pos);
+    }
+    return ""; // 如果找不到目录分隔符，则返回空字符串
+}
 class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
 {
   public:
@@ -105,8 +110,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout.close();
             return true;
         }
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(FD->getLocation()).isInvalid())
             return true;
         else
@@ -164,8 +168,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout.close();
             return true;
         }
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(VD->getLocation()).isInvalid())
             return true;
         else
@@ -278,8 +281,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(RD->getLocation()))
             return true;
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(RD->getLocation()).isInvalid())
             return true;
         else
@@ -328,8 +330,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout.close();
             return true;
         }
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(FD->getLocation()).isInvalid())
             return true;
         else

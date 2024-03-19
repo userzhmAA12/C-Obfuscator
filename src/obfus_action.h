@@ -73,8 +73,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(SM.isInSystemHeader(StartLoc))
             return true;
         // std::cout << "Start1\n";
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
         else
@@ -112,8 +111,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             return true;
         // std::cout << "Start2\n";
         
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
         else
@@ -153,8 +151,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string expr_name = DRE->getNameInfo().getAsString();
         if(expr_name.length()==0)return true;
         // std::cout << expr_name << "\n";
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         // std::cout << SM.getFileID(DRE->getLocation()).isInvalid() << "\n";
         if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
@@ -208,8 +205,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(SM.isInSystemHeader(StartLoc))
             return true;
         // std::cout << "Start4\n";
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
         else
@@ -250,8 +246,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string mem_name = ME->getMemberNameInfo().getAsString();
         if(mem_name.length()==0)return true;
         std::cout << mem_name << "\n";
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(N_StartLoc).isInvalid())
             return true;
         else
@@ -302,8 +297,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(SM.isInSystemHeader(CCD->getLocation()))
             return true;
         // std::cout << "Start6\n";
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(CCD->getLocation()).isInvalid())
             return true;
         else
@@ -337,6 +331,31 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                     }
                 }
             }
+        }
+        return true;
+    }
+    bool VisitInitListExpr(clang::InitListExpr *ILE)
+    {
+        
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        if(SM.isInSystemHeader(ILE->getBeginLoc()))
+            return true;
+        // std::cout << "Start6\n";
+        std::string folder_path = getparentdir(info_path);// project path
+        if(SM.getFileID(ILE->getBeginLoc()).isInvalid())
+            return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(ILE->getBeginLoc()))))
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(ILE->getBeginLoc())))->getFileEntry().tryGetRealPathName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
+        for(auto tmp: ILE->inits())
+        {
+            clang::SourceLocation startLoc = tmp->getBeginLoc();
+            startLoc.dump(SM);
         }
         return true;
     }
@@ -402,8 +421,7 @@ class ObfusFrontendAction : public clang::ASTFrontendAction
         //              << "\n";
         //
         std::error_code ec;
-        std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
+        std::string folder_path = getparentdir(info_path);// project path
         std::cout << "finish2\n";
         for (auto it = SM.fileinfo_begin(); it != SM.fileinfo_end(); ++it) {
             const clang::FileEntryRef& fileEntryRef = it->first;

@@ -8,7 +8,57 @@
 #include <filesystem>
 #include <llvm/Support/CommandLine.h>
 
-namespace fs = std::filesystem;
+#include <stdio.h>
+#include <dirent.h>
+#include <cstring>
+#include <sys/stat.h>
+
+// namespace fs = std::filesystem;
+
+void recursive_directory(std::string basePath)
+{
+    std::string path;
+    struct dirent *dp;
+    DIR *dir = opendir(basePath.c_str());
+
+    if (!dir) {
+        return;
+    }
+    while ((dp = readdir(dir)) != NULL) {
+        if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0) {
+            path = basePath + "/" + dp->d_name;
+
+            // 如果是目录，则递归调用自身
+            struct stat statbuf;
+            if (stat(path.c_str(), &statbuf) != -1)
+            {
+                if (S_ISDIR(statbuf.st_mode)) 
+                {
+                    recursive_directory(path);
+                } 
+                else 
+                {
+                    std::size_t lastDotPos = path.find_last_of('.');
+                    if (lastDotPos != std::string::npos)
+                    {
+                        std::string extension = path.substr(lastDotPos + 1);
+                        if ((extension == ".h" || extension == ".hh" || extension == ".hpp" || extension ==".c" || extension == ".cpp") )
+                        {
+                            size_t pos = path.find("-obfuscated");
+                            if(pos!=std::string::npos)
+                            {
+                                std::string new_file_path = path.substr(0, pos) + extension;
+                                rename(path.c_str(), new_file_path.c_str());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+}
 
 static llvm::cl::OptionCategory MyASTSlicer_category("myastslicer options");
 static llvm::cl::extrahelp
@@ -16,6 +66,7 @@ static llvm::cl::extrahelp
 
 int main(int argc, const char **argv)
 {
+    /*
     fs::path file_path(argv[1]);
     if (!fs::exists(file_path))
     {
@@ -24,6 +75,9 @@ int main(int argc, const char **argv)
         return 0;
     }
     fs::path dir_path = file_path.parent_path();
+    */
+   std::string file_path(argv[1]);
+   std::string dir_path = obfuscator::getparentdir(file_path);
 
     int argc_f = argc - 1; // don't include return file path
     auto expected_parser = clang::tooling::CommonOptionsParser::create(
@@ -70,7 +124,7 @@ int main(int argc, const char **argv)
     //std::string new_folder = dir_path.string() + "/obfuscated";
     //if(!fs::exists(new_folder))
         //fs::create_directory(new_folder);
-    for (const auto &entry1 : fs::recursive_directory_iterator(dir_path))
+    /* for (const auto &entry1 : fs::recursive_directory_iterator(dir_path))
     {
         if ((entry1.path().extension() == ".h" || entry1.path().extension() == ".hh" || entry1.path().extension() == ".hpp" || entry1.path().extension()==".c" || entry1.path().extension()==".cpp") )
         {
@@ -81,7 +135,7 @@ int main(int argc, const char **argv)
                 fs::rename(entry1.path(), new_file_path);
             }
         }
-    }
-
+    } */
+    recursive_directory(dir_path);
     return 0;
 }
