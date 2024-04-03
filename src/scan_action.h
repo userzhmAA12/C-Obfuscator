@@ -43,13 +43,31 @@ std::string getparentdir(const std::string& filePath) {
     }
     return ""; // 如果找不到目录分隔符，则返回空字符串
 }
+std::string find_replace(const std::string& base, const std::string& token, const std::string& rep) {
+    std::string result = base;
+    size_t pos = 0;
+    // 查找并替换所有满足条件的 token
+    while ((pos = result.find(token, pos)) != std::string::npos) {
+        // 检查前一个字符和后一个字符是否为字母、数字或下划线
+        if((pos == 0 || (!std::isalnum(result[pos-1]) && result[pos-1]!='_')) && (!std::isalnum(result[pos + token.length()]) && result[pos + token.length()] != '_'))
+        {
+            result.replace(pos, token.length(), rep);
+            pos += rep.length();
+        }
+        else 
+        {
+            ++pos;
+        }
+    }
+    return result;
+}
 class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
 {
   public:
     explicit ScanASTVisitor(clang::ASTContext *ctx,
                             clang::Rewriter &R,
                             std::string &fn)
-        : _ctx(ctx), _rewriter(R), info_path(fn), data(), count_func(0), count_var(0)
+        : _ctx(ctx), _rewriter(R), info_path(fn), data(), data1(), data2(), count_func(0), count_var(0)
     {
         std::ifstream fin(info_path);
         if(!fin)
@@ -77,13 +95,18 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             {
                 fin >> pre_name >> after_name;
                 count_var++;
-                data.insert(std::pair<std::string, std::string>(pre_name, "ignore"));
-                data.insert(std::pair<std::string, std::string>("~"+pre_name, "ignore"));
+                data.insert(std::pair<std::string, std::string>(pre_name, after_name));
+                data.insert(std::pair<std::string, std::string>("~"+pre_name, "~" + after_name));
+                data1.insert(std::pair<std::string, std::string>(pre_name, after_name));
+                data1.insert(std::pair<std::string, std::string>("struct " + pre_name, "struct " + after_name));
+                data1.insert(std::pair<std::string, std::string>("struct " + pre_name + "*", "struct " + after_name + "*"));
             }
-            else if(op == "Macro")
+            else if(op == "Field")
             {
-                fin >> pre_name;
-                data[pre_name] = "ignore";
+                std::string belong;
+                fin >> pre_name >> belong >> after_name;
+                std::pair<std::string, std::string> tmp(pre_name, belong);
+                data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp, after_name));
             }
         }
         fin.close();
@@ -153,7 +176,8 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         if(SM.isInSystemHeader(VD->getLocation()))
             return true;
         std::string var_name = VD->getNameAsString();
-        // std::string var_type = VD->getType().getAsString();
+        std::string var_type = VD->getType().getAsString();
+        // std::cout << var_type << "\n";
         if(var_name.length()==0)return true;
         if(data.count(var_name)!=0 && data[var_name]!="ignore" && (SM.isMacroBodyExpansion(VD->getLocation()) || SM.isMacroArgExpansion(VD->getLocation())))
         {
@@ -195,88 +219,14 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout << "Var " << var_name << " " << "Variable" << std::to_string(count_var) << std::endl;
             fout.close();
         }
+
         return true;
     }
-    bool VisitDeclRefExpr(clang::DeclRefExpr* DRE) 
+    bool VisitDeclRefExpr(clang::DeclRefExpr* DRE) //不考虑跳过宏就不用处理了
     {
-        clang::SourceManager &SM = _ctx->getSourceManager();
-        clang::SourceLocation StartLoc = DRE->getLocation();
-        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
-        clang::SourceLocation DeclLoc = DRE->getDecl()->getLocation();
-        clang::SourceLocation N_DeclLoc = SM.getSpellingLoc(DeclLoc);
-        if(SM.isInSystemHeader(StartLoc))
-            return true;
-        if(SM.isInSystemHeader(DeclLoc))
-            return true;
-        // std::cout << "Start3\n";
-        std::string expr_name = DRE->getNameInfo().getAsString();
-        // std::cout << expr_name << "\n";
-        /*std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
-        // std::cout << SM.getFileID(DRE->getLocation()).isInvalid() << "\n";
-        // StartLoc.dump(SM);
-        // std::cout << (SM.isMacroBodyExpansion(StartLoc) || SM.isMacroArgExpansion(StartLoc)) << "\n";
-        if(SM.getFileID(N_StartLoc).isInvalid())
-        {
-            std::cout << "1\n";
-            return true;
-        }
-        else
-        {
-            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
-            {
-                std::cout << "2\n";
-                return true;    
-            }
-            
-            std::string loc_file1 = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file1, folder_path))
-            {
-                std::cout << "3\n";
-                return true;
-            }
-                
-        }
-        if(SM.getFileID(N_DeclLoc).isInvalid())
-        {
-            std::cout << "4\n";
-            return true;
-        }
-            
-        else
-        {
-            if(!SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc)).has_value())
-            {
-                std::cout << "5\n";
-                return true;
-            }
-                
-            std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file2, folder_path))
-            {
-                std::cout << "6\n";return true;
-            }
-                
-        }*/
-        
-        if(expr_name.length()==0)return true;
-        
-        //DRE->dump();
-        if(data.count(expr_name)==1 && data[expr_name]!="ignore" && (SM.isMacroBodyExpansion(StartLoc) || SM.isMacroArgExpansion(StartLoc)))
-        {
-            data[expr_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << expr_name << "\n";
-            fout.close();
-        }
         return true;
     }
-    bool VisitCXXRecordDecl(clang::CXXRecordDecl *RD) //处理自定义类的类名混淆
+    bool VisitRecordDecl(clang::RecordDecl *RD) //处理自定义类的类名混淆
     {
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(RD->getLocation()))
@@ -315,9 +265,11 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         if(SM.isInSystemHeader(FD->getLocation()))
             return true;
         std::string record_name = FD->getNameAsString();
+        clang::RecordDecl* parent = FD->getParent();
+        std::string parent_name = parent->getNameAsString();
         // std::string var_type = FD->getType().getAsString();
         if(record_name.length()==0)return true;
-        if(data.count(record_name)!=0 && data[record_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
+        /* if(data.count(record_name)!=0 && data[record_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
         {
             data[record_name] = "ignore";
             std::ofstream fout(info_path, std::ios::app);
@@ -329,7 +281,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout << "Macro " << record_name << "\n";
             fout.close();
             return true;
-        }
+        } */
         std::string folder_path = getparentdir(info_path);// project path
         if(SM.getFileID(FD->getLocation()).isInvalid())
             return true;
@@ -342,10 +294,11 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
                 return true;
         }
         
-        if (data.count(record_name)==0 && !SM.isMacroBodyExpansion(FD->getLocation()) && !SM.isMacroArgExpansion(FD->getLocation())) 
+        if (data2.count(std::pair<std::string, std::string>(record_name, parent_name))==0 && !SM.isMacroBodyExpansion(FD->getLocation()) && !SM.isMacroArgExpansion(FD->getLocation())) 
         {
             ++count_var;
-            data.insert(std::pair<std::string, std::string>(FD->getNameAsString(), "Variable"+std::to_string(count_var)));
+            std::pair<std::string, std::string> tmp(record_name, parent_name);
+            data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp, "Variable"+std::to_string(count_var)));
             // std::cout << "var: " << record_name << " is repalced by " << "Variable" << std::to_string(count_var) << "\n";
             std::ofstream fout(info_path, std::ios::app);
             if(!fout)
@@ -353,67 +306,13 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
                 std::cout << "[error]open file:" << info_path << " failed!\n";
                 exit(-1);
             }
-            fout << "Var " << record_name << " " << "Variable" << std::to_string(count_var) << "\n";
+            fout << "Field " << record_name << " " << parent_name << " " << "Variable" << std::to_string(count_var) << "\n";
             fout.close();
         }
         return true;
     }
-    bool VisitMemberExpr(clang::MemberExpr *ME)
+    bool VisitMemberExpr(clang::MemberExpr *ME) //扫描阶段如果不考虑跳宏就不用处理了
     {
-        clang::SourceManager &SM = _ctx->getSourceManager();
-        clang::SourceLocation StartLoc = ME->getMemberLoc();
-        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
-        clang::SourceLocation DeclLoc = ME->getMemberDecl()->getLocation();
-        clang::SourceLocation N_DeclLoc = SM.getSpellingLoc(DeclLoc);
-        if(SM.isInSystemHeader(StartLoc))
-            return true;
-        if(SM.isInSystemHeader(DeclLoc))
-            return true;
-        
-        std::string mem_name = ME->getMemberNameInfo().getAsString();
-        // std::cout << mem_name << "\n";
-        /*std::filesystem::path path(info_path);// variable_replace.txt path
-        std::filesystem::path folder_path = path.parent_path();// project path
-        if(SM.getFileID(N_StartLoc).isInvalid())
-            return true;
-        else
-        {
-            
-            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
-                return true;
-            std::string loc_file1 = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file1, folder_path))
-                return true;
-        }
-        if(SM.getFileID(N_DeclLoc).isInvalid())
-            return true;
-        else
-        {
-            if(!SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc)))
-                return true;
-            std::string loc_file2 = SM.getFileEntryRefForID(SM.getFileID(N_DeclLoc))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file2, folder_path))
-                return true;
-        }*/
-        // std::cout << SM.getFileEntryForID(SM.getFileID(ME->getMemberDecl()->getLocation()))->getName().str() << "\n";
-        
-        if(mem_name.length()==0)return true;
-        if (!can_obfuscate(mem_name))
-        {
-            return true;
-        }
-        if(data.count(mem_name)==1 && data[mem_name]!="ignore" && (SM.isMacroBodyExpansion(StartLoc) || SM.isMacroArgExpansion(StartLoc)))
-        {
-            data[mem_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << mem_name << "\n";
-            fout.close();
-        }
         return true;
     }
     bool VisitCXXConstructorDecl(clang::CXXConstructorDecl *CCD)
@@ -446,6 +345,8 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
     clang::Rewriter &_rewriter;
     std::string &info_path;
     std::map<std::string, std::string> data; //储存函数名和变量名的替换信息
+    std::map<std::string, std::string> data1;
+    std::map<std::pair<std::string, std::string>, std::string> data2;
     int count_func;
     int count_var;
     
