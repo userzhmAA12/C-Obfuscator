@@ -52,15 +52,17 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 data.insert(std::pair<std::string, std::string>(pre_name, after_name));
                 data.insert(std::pair<std::string, std::string>("~"+pre_name, "~" + after_name));
                 data1.insert(std::pair<std::string, std::string>(pre_name, after_name));
-                data1.insert(std::pair<std::string, std::string>("struct " + pre_name, "struct " + after_name));
-                data1.insert(std::pair<std::string, std::string>("struct " + pre_name + "*", "struct " + after_name + "*"));
+                // data1.insert(std::pair<std::string, std::string>("struct " + pre_name, "struct " + after_name));
+                // data1.insert(std::pair<std::string, std::string>("struct " + pre_name + "*", "struct " + after_name + "*"));
             }
             else if(op == "Field")
             {
                 std::string belong;
                 fin >> pre_name >> belong >> after_name;
-                std::pair<std::string, std::string> tmp(pre_name, belong);
-                data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp, after_name));
+                std::pair<std::string, std::string> tmp1(pre_name, belong);
+                std::pair<std::string, std::string> tmp2(pre_name, "struct " + belong);
+                data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp1, after_name));
+                data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp2, after_name));
             }
             /* else if(op == "Macro")
             {
@@ -110,20 +112,29 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 _rewriter.ReplaceText(SR, data[func_name]);
         }
 
-        /* for (auto it = data1.begin(); it != data1.end(); ++it) 
+        //去除前缀const 和 数组后缀
+        int pos = ret_type.find("[");
+        if(pos!=std::string::npos)
+            ret_type = ret_type.substr(0, pos);
+        pos = ret_type.find("const ");
+        if(pos==0)
+            ret_type = ret_type.substr(pos+6);
+        pos = ret_type.find("_Bool");
+        while(pos!=std::string::npos)
+        {
+            ret_type.replace(pos, 5, "bool");
+            pos = ret_type.find("_Bool");
+        }
+        std::string replace_type = ret_type;
+        for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
             std::string pre_name = it->first;
             std::string after_name = it->second;
-            ret_type = find_replace(ret_type, pre_name, after_name);
+            replace_type = find_replace(replace_type, pre_name, after_name);
         }
         clang::SourceRange T_SR = FD->getReturnTypeSourceRange();
-        _rewriter.ReplaceText(T_SR, ret_type); */
-        if(data1.count(ret_type)==1 && data1[ret_type]!="ignore")
-        {
-            clang::SourceRange T_SR = FD->getReturnTypeSourceRange();
-            if(_rewriter.getRewrittenText(T_SR)==ret_type)
-                _rewriter.ReplaceText(T_SR, data1[ret_type]);
-        }
+        if(_rewriter.getRewrittenText(T_SR)==ret_type)
+            _rewriter.ReplaceText(T_SR, replace_type); 
         return true;
     }
 
@@ -150,38 +161,44 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         }
         
         std::string var_name = VD->getNameAsString();
+        std::string replace_name = var_name;
         std::string var_type = VD->getType().getAsString();
+        //去除前缀const 和 数组后缀
+        int pos = var_type.find("[");
+        if(pos!=std::string::npos)
+            var_type = var_type.substr(0, pos);
+        pos = var_type.find("const ");
+        if(pos==0)
+            var_type = var_type.substr(pos+6);
+        pos = var_type.find("_Bool");
+        while(pos!=std::string::npos)
+        {
+            var_type.replace(pos, 5, "bool");
+            pos = var_type.find("_Bool");
+        }
+        std::string replace_type = var_type;
         
-        /* clang::SourceLocation T_StartLoc = VD->getTypeSpecStartLoc();
-        clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
-        clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
             std::string pre_name = it->first;
             std::string after_name = it->second;
-            var_type = find_replace(var_type, pre_name, after_name);
+            replace_type = find_replace(replace_type, pre_name, after_name);
         }
-        
-        _rewriter.ReplaceText(T_SR, var_type);
-        */
 
-        if(var_name.length()==0)return true;
         if(data.count(var_name)==1 && data[var_name]!="ignore")
         {
-            clang::SourceRange SR = VD->getSourceRange();
-            // clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(var_name.length()-1);
-            // clang::SourceRange SR(N_StartLoc, N_EndLoc);
+            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(var_name.length()-1);
+            clang::SourceRange SR(N_StartLoc, N_EndLoc);
             if(_rewriter.getRewrittenText(SR)==var_name)
                 _rewriter.ReplaceText(SR, data[var_name]);
         }
-        if(data1.count(var_type)==1 && data1[var_type]!="ignore")
-        {
-            clang::SourceLocation T_StartLoc = VD->getTypeSpecStartLoc();
-            clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
-            clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
-            if(_rewriter.getRewrittenText(T_SR)==var_type)
-                _rewriter.ReplaceText(T_SR, data1[var_type]);
-        } 
+
+        clang::SourceLocation T_StartLoc = VD->getTypeSpecStartLoc();
+        clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
+        clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
+        if(_rewriter.getRewrittenText(T_SR)==var_type)
+            _rewriter.ReplaceText(T_SR, replace_type);
+        
         return true;
     }
     bool VisitDeclRefExpr(clang::DeclRefExpr* DRE) 
@@ -291,36 +308,42 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string var_type = FD->getType().getAsString();
         clang::RecordDecl* parent = FD->getParent();
         std::string parent_name = parent->getNameAsString();
-        std::cout << record_name << " " << parent_name << "\n";
+        // std::cout << record_name << " " << parent_name << "\n";
         if(record_name.length()==0)return true;
 
-        /* clang::SourceLocation T_StartLoc = FD->getTypeSpecStartLoc();
-        clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
-        clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
+        //去除前缀const 和 数组后缀
+        int pos = var_type.find("[");
+        if(pos!=std::string::npos)
+            var_type = var_type.substr(0, pos);
+        pos = var_type.find("const ");
+        if(pos==0)
+            var_type = var_type.substr(pos+6);
+        pos = var_type.find("_Bool");
+        while(pos!=std::string::npos)
+        {
+            var_type.replace(pos, 5, "bool");
+            pos = var_type.find("_Bool");
+        }
+        std::string replace_type = var_type;
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
             std::string pre_name = it->first;
             std::string after_name = it->second;
-            var_type = find_replace(var_type, pre_name, after_name);
+            replace_type = find_replace(replace_type, pre_name, after_name);
         }
-        _rewriter.ReplaceText(T_SR, var_type); */
 
         if(data2.count(std::pair<std::string, std::string>(record_name, parent_name))==1 && data2[std::pair<std::string, std::string>(record_name, parent_name)]!="ignore")
         {
-            // clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(record_name.length()-1);
-            // clang::SourceRange SR(N_StartLoc, N_EndLoc);
-            clang:: SourceRange SR = FD->getSourceRange();
+            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(record_name.length()-1);
+            clang::SourceRange SR(N_StartLoc, N_EndLoc);
             if(_rewriter.getRewrittenText(SR)==record_name)
                 _rewriter.ReplaceText(SR, data2[std::pair<std::string, std::string>(record_name, parent_name)]);
         }
-        if(data1.count(var_type)==1 && data1[var_type]!="ignore")
-        {
-            clang::SourceLocation T_StartLoc = FD->getTypeSpecStartLoc();
-            clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
-            clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
-            if(_rewriter.getRewrittenText(T_SR)==var_type)
-                _rewriter.ReplaceText(T_SR, data1[var_type]);
-        }
+        clang::SourceLocation T_StartLoc = FD->getTypeSpecStartLoc();
+        clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
+        clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
+        if(_rewriter.getRewrittenText(T_SR)==var_type)
+            _rewriter.ReplaceText(T_SR, replace_type);
         return true;
     }
     bool VisitMemberExpr(clang::MemberExpr *ME)
@@ -445,12 +468,29 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             if(!is_prefix(loc_file, folder_path))
                 return true;
         }
+        std::string parent_name = ILE->getType().getAsString();
         for(auto tmp: ILE->inits())
         {
             clang::SourceLocation startLoc = tmp->getBeginLoc();
             clang::SourceRange SR = tmp->getSourceRange();
-            // std::cout << _rewriter.getRewrittenText(SR) << "\n";
-            // startLoc.dump(SM);
+            std::string init_name = _rewriter.getRewrittenText(SR);
+            if(init_name[0]=='.')
+            {
+                size_t dotPos = init_name.find('.');
+                size_t equalPos = init_name.find('=');
+                init_name = init_name.substr(dotPos + 1, equalPos - dotPos - 1);
+                if (!init_name.empty()) 
+                {
+                    init_name.erase(0, init_name.find_first_not_of(" "));
+                    init_name.erase(init_name.find_last_not_of(" ") + 1);
+                }
+                if (data2.count(std::pair<std::string, std::string>(init_name, parent_name)) == 1 && data2[std::pair<std::string, std::string>(init_name, parent_name)] != "ignore")
+                {
+                    clang::SourceLocation endLoc = startLoc.getLocWithOffset(init_name.size());
+                    clang::SourceRange N_SR = clang::SourceRange(startLoc, endLoc);
+                    _rewriter.ReplaceText(N_SR, "." + data2[std::pair<std::string, std::string>(init_name, parent_name)]);
+                }
+            }
         }
         return true;
     }

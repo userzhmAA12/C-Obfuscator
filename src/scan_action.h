@@ -98,8 +98,8 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
                 data.insert(std::pair<std::string, std::string>(pre_name, after_name));
                 data.insert(std::pair<std::string, std::string>("~"+pre_name, "~" + after_name));
                 data1.insert(std::pair<std::string, std::string>(pre_name, after_name));
-                data1.insert(std::pair<std::string, std::string>("struct " + pre_name, "struct " + after_name));
-                data1.insert(std::pair<std::string, std::string>("struct " + pre_name + "*", "struct " + after_name + "*"));
+                // data1.insert(std::pair<std::string, std::string>("struct " + pre_name, "struct " + after_name));
+                // data1.insert(std::pair<std::string, std::string>("struct " + pre_name + "*", "struct " + after_name + "*"));
             }
             else if(op == "Field")
             {
