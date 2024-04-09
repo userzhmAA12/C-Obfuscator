@@ -174,17 +174,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout.close();
             return true;
         }
-        std::string folder_path = getparentdir(info_path);// project path
-        if(SM.getFileID(FD->getLocation()).isInvalid())
-            return true;
-        else
-        {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))))
-                return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation())))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file, folder_path))
-                return true;
-        }
         
         if (!can_obfuscate(func_name))
         {
@@ -233,17 +222,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout.close();
             return true;
         }
-        std::string folder_path = getparentdir(info_path);// project path
-        if(SM.getFileID(VD->getLocation()).isInvalid())
-            return true;
-        else
-        {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation()))))
-                return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(VD->getLocation())))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file, folder_path))
-                return true;
-        }
         
         
         if(data.count(var_name)==0 && !SM.isMacroBodyExpansion(VD->getLocation()) && !SM.isMacroArgExpansion(VD->getLocation()))
@@ -272,17 +250,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(RD->getLocation()))
             return true;
-        std::string folder_path = getparentdir(info_path);// project path
-        if(SM.getFileID(RD->getLocation()).isInvalid())
-            return true;
-        else
-        {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation()))))
-                return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(RD->getLocation())))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file, folder_path))
-                return true;
-        }
         std::string record_name = RD->getNameAsString();
         if(record_name.length()==0)return true;
         if (data.count(record_name)==0) {
@@ -323,17 +290,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             fout.close();
             return true;
         } */
-        std::string folder_path = getparentdir(info_path);// project path
-        if(SM.getFileID(FD->getLocation()).isInvalid())
-            return true;
-        else
-        {
-            if(!SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation()))))
-                return true;
-            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(SM.getSpellingLoc(FD->getLocation())))->getFileEntry().tryGetRealPathName().str();
-            if(!is_prefix(loc_file, folder_path))
-                return true;
-        }
         
         if (data2.count(std::pair<std::string, std::string>(record_name, parent_name))==0 && !SM.isMacroBodyExpansion(FD->getLocation()) && !SM.isMacroArgExpansion(FD->getLocation())) 
         {
