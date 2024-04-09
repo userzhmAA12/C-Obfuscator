@@ -18,7 +18,7 @@ namespace obfuscator
 static void replace_suffix(std::string &fn, std::string with)
 {
     int index = fn.find_last_of(".");
-    fn        = fn.substr(0, index) + with;
+    fn        = fn.substr(0, index) + with+fn.substr(index);
 }
 static bool can_obfuscate(std::string &fn)
 {
@@ -101,6 +101,23 @@ clang::QualType getDecl_realType(clang::QualType declType)
         declType = pointerType->getPointeeType();
     }
     return declType;
+}
+int getEnumValue(const clang::EnumConstantDecl *EnumConst){
+        llvm::APSInt Value = EnumConst->getInitVal();
+        int intValue = Value.getZExtValue();
+        return intValue;
+}
+static std::string get_stmt_string(const clang::Stmt *S)
+{
+    if(S==nullptr){
+        return "0";
+    }
+    clang::LangOptions LO;
+    LO.CPlusPlus = 1;
+    std::string buffer;
+    llvm::raw_string_ostream strout(buffer);
+    S->printPretty(strout, nullptr, clang::PrintingPolicy(LO));
+    return strout.str();
 }
 class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
 {
@@ -335,6 +352,11 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
     }
     bool VisitInitListExpr(clang::InitListExpr *ILE)
     {
+        return true;
+    }
+    bool VisitEnumDecl(clang::EnumDecl *ED)
+    {
+
         return true;
     }
   private:

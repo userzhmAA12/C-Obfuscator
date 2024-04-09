@@ -120,22 +120,5 @@ int main(int argc, const char **argv)
     std::cout << "finish1\n";
     tool.run(my_factory2.get());
     std::cout << "[obfuscator exit]\n";
-
-    //std::string new_folder = dir_path.string() + "/obfuscated";
-    //if(!fs::exists(new_folder))
-        //fs::create_directory(new_folder);
-    /* for (const auto &entry1 : fs::recursive_directory_iterator(dir_path))
-    {
-        if ((entry1.path().extension() == ".h" || entry1.path().extension() == ".hh" || entry1.path().extension() == ".hpp" || entry1.path().extension()==".c" || entry1.path().extension()==".cpp") )
-        {
-            size_t pos = entry1.path().stem().string().find("-obfuscated");
-            if(pos!=std::string::npos)
-            {
-                std::string new_file_path = entry1.path().parent_path().string() + "/" + entry1.path().stem().string().substr(0, pos) + entry1.path().extension().string();
-                fs::rename(entry1.path(), new_file_path);
-            }
-        }
-    } */
-    recursive_directory(dir_path);
     return 0;
 }

@@ -109,6 +109,24 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             std::string after_name = it->second;
             replace_type = find_replace(replace_type, pre_name, after_name);
         }
+        size_t pos = 0;
+        while ((pos = replace_type.find("enum ", pos)) != std::string::npos)
+        {
+            if ((pos == 0 || (!std::isalnum(replace_type[pos - 1]) && replace_type[pos - 1] != '_')))
+            {
+                size_t end = replace_type.find(" ", pos + 5);
+                if (end == std::string::npos)
+                {
+                    replace_type.replace(pos, replace_type.length() - pos, "int");
+                }
+                else
+                    replace_type.replace(pos, end - pos - 1, "int");
+            }
+            else
+            {
+                ++pos;
+            }
+        }
         clang::SourceRange T_SR = FD->getReturnTypeSourceRange();
         if(ret_type != replace_type && _rewriter.getRewrittenText(T_SR)==ret_type)
             _rewriter.ReplaceText(T_SR, replace_type); 
@@ -138,7 +156,24 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             std::string after_name = it->second;
             replace_type = find_replace(replace_type, pre_name, after_name);
         }
-
+        size_t pos = 0;
+        while ((pos = replace_type.find("enum ", pos)) != std::string::npos)
+        {
+            if ((pos == 0 || (!std::isalnum(replace_type[pos - 1]) && replace_type[pos - 1] != '_')))
+            {
+                size_t end = replace_type.find(" ", pos + 5);
+                if (end == std::string::npos)
+                {
+                    replace_type.replace(pos, replace_type.length() - pos, "int");
+                }
+                else
+                    replace_type.replace(pos, end - pos - 1, "int");
+            }
+            else
+            {
+                ++pos;
+            }
+        }
         if(data.count(var_name)==1 && data[var_name]!="ignore")
         {
             clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(var_name.length()-1);
@@ -171,19 +206,32 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string expr_name = DRE->getNameInfo().getAsString();
         if(expr_name.length()==0)return true;
         
-        
-        // std::cout << expr_name << "\n";
-        
-        //DRE->dump();
         if(data.count(expr_name)==1&&data[expr_name]!="ignore")
         {
-            // std::cout << expr_name << " " << data[expr_name] <<"\n";
             clang::SourceRange SR = DRE->getNameInfo().getSourceRange();
-            // SR.getBegin().dump(SM);
-            // std::cout << _ctx->getSourceManager().isMacroArgExpansion(SR.getBegin()) << "\n";
-            // std::cout << _rewriter.getRewrittenText(SR) << "\n";
             if(_rewriter.getRewrittenText(SR)==expr_name)
                 _rewriter.ReplaceText(SR ,data[expr_name]);
+        }
+        if(const clang::EnumConstantDecl *EnumConst = clang::dyn_cast<clang::EnumConstantDecl>(DRE->getDecl())){
+            int value = getEnumValue(EnumConst);
+            std::string str1=std::to_string(value);
+            auto SR= DRE->getSourceRange();//(const_cast<clang::DeclRefExpr *>(DRE));
+            std::cout<<get_stmt_string(DRE)<<"  replaceEnum slice insert "<<str1<<"\n";
+            if (SR.isValid()) {
+                clang::SourceLocation EndLoc = clang::Lexer::getLocForEndOfToken(SR.getEnd(), 0, _rewriter.getSourceMgr(), _rewriter.getLangOpts());
+                if (EndLoc.isValid()) {
+                    std::string TokenText = clang::Lexer::getSourceText(clang::CharSourceRange::getTokenRange(EndLoc), _rewriter.getSourceMgr(),_rewriter.getLangOpts()).str();
+                    if (TokenText == ")" || TokenText == "]") {
+                        ;//条件里 || &&  == 目前看没问题
+                    }
+                    else SR.setEnd(EndLoc.getLocWithOffset(-1));
+                }
+                clang::SourceManager &SM = _rewriter.getSourceMgr();
+                // llvm::outs()<< "????SourceRange: " << SR.getBegin().printToString(SM) << " - " << SR.getEnd().printToString(SM) << "\n";
+                // _rewriter.RemoveText(SR);
+                // _rewriter.InsertText(SR.getEnd(),str1);
+                _rewriter.ReplaceText(SR,str1);
+            }
         }
         return true;
     }
@@ -228,6 +276,24 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             std::string pre_name = it->first;
             std::string after_name = it->second;
             replace_type = find_replace(replace_type, pre_name, after_name);
+        }
+        size_t pos = 0;
+        while ((pos = replace_type.find("enum ", pos)) != std::string::npos)
+        {
+            if ((pos == 0 || (!std::isalnum(replace_type[pos - 1]) && replace_type[pos - 1] != '_')))
+            {
+                size_t end = replace_type.find(" ", pos + 5);
+                if (end == std::string::npos)
+                {
+                    replace_type.replace(pos, replace_type.length() - pos, "int");
+                }
+                else
+                    replace_type.replace(pos, end - pos - 1, "int");
+            }
+            else
+            {
+                ++pos;
+            }
         }
 
         if(data2.count(std::pair<std::string, std::string>(record_name, parent_name))==1 && data2[std::pair<std::string, std::string>(record_name, parent_name)]!="ignore")
@@ -368,6 +434,24 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             std::string after_name = it->second;
             replace_name = find_replace(replace_name, pre_name, after_name);
         }
+        size_t pos = 0;
+        while ((pos = replace_name.find("enum ", pos)) != std::string::npos)
+        {
+            if ((pos == 0 || (!std::isalnum(replace_name[pos - 1]) && replace_name[pos - 1] != '_')))
+            {
+                size_t end = replace_name.find(" ", pos + 5);
+                if (end == std::string::npos)
+                {
+                    replace_name.replace(pos, replace_name.length() - pos, "int");
+                }
+                else
+                    replace_name.replace(pos, end - pos - 1, "int");
+            }
+            else
+            {
+                ++pos;
+            }
+        }
 
         clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(cast_name.length()+1);
         clang::SourceRange T_SR(N_StartLoc, N_EndLoc);
@@ -449,22 +533,19 @@ class ObfusFrontendAction : public clang::ASTFrontendAction
 
     void EndSourceFileAction() override
     {
-        clang::SourceManager &SM = _rewriter.getSourceMgr();
+       clang::SourceManager &SM = _rewriter.getSourceMgr();
         // llvm::errs() << "** EndSourceFileAction for: "
         //              << SM.getFileEntryForID(SM.getMainFileID())->getName()
         //              << "\n";
         //
         std::error_code ec;
-        std::cout << "finish2\n";
         std::string file_name =
             SM.getFileEntryForID(SM.getMainFileID())->getName().str();
         // std::cout << "** file_name: " << file_name << "\n";
-        std::string repalced;
-        repalced = file_name.substr(file_name.rfind("."), file_name.length());
-        // std::cout << repalced << "\n";
-        replace_suffix(file_name, "-obfuscated" + repalced);
+        replace_suffix(file_name, "-obfuscated");
+        llvm::raw_fd_stream fd(file_name, ec);
         // _rewriter.getEditBuffer(SM.getMainFileID()).write(llvm::outs());
-        _rewriter.getEditBuffer(SM.getMainFileID()).write(llvm::outs());
+        _rewriter.getEditBuffer(SM.getMainFileID()).write(fd);
         /* for (auto it = SM.fileinfo_begin(); it != SM.fileinfo_end(); ++it) {
             const clang::FileEntryRef& fileEntryRef = it->first;
             
