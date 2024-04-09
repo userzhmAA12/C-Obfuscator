@@ -111,20 +111,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             if(_rewriter.getRewrittenText(SR)==func_name)
                 _rewriter.ReplaceText(SR, data[func_name]);
         }
-
-        //去除前缀const 和 数组后缀
-        int pos = ret_type.find("[");
-        if(pos!=std::string::npos)
-            ret_type = ret_type.substr(0, pos);
-        pos = ret_type.find("const ");
-        if(pos==0)
-            ret_type = ret_type.substr(pos+6);
-        pos = ret_type.find("_Bool");
-        while(pos!=std::string::npos)
-        {
-            ret_type.replace(pos, 5, "bool");
-            pos = ret_type.find("_Bool");
-        }
+        
+        ret_type = type_change(ret_type);
         std::string replace_type = ret_type;
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
@@ -133,7 +121,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             replace_type = find_replace(replace_type, pre_name, after_name);
         }
         clang::SourceRange T_SR = FD->getReturnTypeSourceRange();
-        if(_rewriter.getRewrittenText(T_SR)==ret_type)
+        if(ret_type != replace_type && _rewriter.getRewrittenText(T_SR)==ret_type)
             _rewriter.ReplaceText(T_SR, replace_type); 
         return true;
     }
@@ -163,21 +151,9 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string var_name = VD->getNameAsString();
         std::string replace_name = var_name;
         std::string var_type = VD->getType().getAsString();
-        //去除前缀const 和 数组后缀
-        int pos = var_type.find("[");
-        if(pos!=std::string::npos)
-            var_type = var_type.substr(0, pos);
-        pos = var_type.find("const ");
-        if(pos==0)
-            var_type = var_type.substr(pos+6);
-        pos = var_type.find("_Bool");
-        while(pos!=std::string::npos)
-        {
-            var_type.replace(pos, 5, "bool");
-            pos = var_type.find("_Bool");
-        }
+        var_type = type_change(var_type);
         std::string replace_type = var_type;
-        
+        std::cout << var_type << " " << getDecl_realType(VD->getType()).getAsString() << "\n";
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
             std::string pre_name = it->first;
@@ -196,7 +172,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         clang::SourceLocation T_StartLoc = VD->getTypeSpecStartLoc();
         clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
         clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
-        if(_rewriter.getRewrittenText(T_SR)==var_type)
+        if(var_type != replace_type && _rewriter.getRewrittenText(T_SR)==var_type)
             _rewriter.ReplaceText(T_SR, replace_type);
         
         return true;
@@ -311,19 +287,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         // std::cout << record_name << " " << parent_name << "\n";
         if(record_name.length()==0)return true;
 
-        //去除前缀const 和 数组后缀
-        int pos = var_type.find("[");
-        if(pos!=std::string::npos)
-            var_type = var_type.substr(0, pos);
-        pos = var_type.find("const ");
-        if(pos==0)
-            var_type = var_type.substr(pos+6);
-        pos = var_type.find("_Bool");
-        while(pos!=std::string::npos)
-        {
-            var_type.replace(pos, 5, "bool");
-            pos = var_type.find("_Bool");
-        }
+        var_type = type_change(var_type);
         std::string replace_type = var_type;
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
@@ -342,7 +306,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         clang::SourceLocation T_StartLoc = FD->getTypeSpecStartLoc();
         clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
         clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
-        if(_rewriter.getRewrittenText(T_SR)==var_type)
+        if(var_type != replace_type && _rewriter.getRewrittenText(T_SR)==var_type)
             _rewriter.ReplaceText(T_SR, replace_type);
         return true;
     }
@@ -496,6 +460,67 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     }
     bool VisitOffsetOfExpr(clang::OffsetOfExpr *OOE) //现在不需要跳宏了也许需要考虑一下
     {
+        return true;
+    }
+    bool VisitCStyleCastExpr(clang::CStyleCastExpr *CSCE) // 处理C风格强制类型转换
+    {
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        clang::SourceLocation StartLoc = CSCE->getBeginLoc();
+        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
+        if(SM.isInSystemHeader(StartLoc))
+            return true;
+        std::string folder_path = getparentdir(info_path);// project path
+        if(SM.getFileID(N_StartLoc).isInvalid())
+            return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(N_StartLoc)))
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(N_StartLoc))->getFileEntry().tryGetRealPathName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
+        std::string cast_name = CSCE->getTypeAsWritten().getAsString();
+        cast_name = type_change(cast_name);
+        std::string replace_name = cast_name;
+        for (auto it = data1.begin(); it != data1.end(); ++it) 
+        {
+            std::string pre_name = it->first;
+            std::string after_name = it->second;
+            replace_name = find_replace(replace_name, pre_name, after_name);
+        }
+
+        clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(cast_name.length()+1);
+        clang::SourceRange T_SR(N_StartLoc, N_EndLoc);
+        if(cast_name!=replace_name && _rewriter.getRewrittenText(T_SR)==("(" + cast_name + ")"))
+        {
+            _rewriter.ReplaceText(T_SR, "(" + replace_name + ")");
+        }
+        return true;
+    }
+    bool VisitTypedefDecl(clang::TypedefDecl *TD)
+    {
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        clang::SourceLocation StartLoc = TD->getBeginLoc();
+        if(SM.isInSystemHeader(StartLoc))
+            return true;
+        std::string folder_path = getparentdir(info_path);// project path
+        if(SM.getFileID(StartLoc).isInvalid())
+            return true;
+        else
+        {
+            if(!SM.getFileEntryRefForID(SM.getFileID(StartLoc)))
+                return true;
+            std::string loc_file = SM.getFileEntryRefForID(SM.getFileID(StartLoc))->getFileEntry().tryGetRealPathName().str();
+            if(!is_prefix(loc_file, folder_path))
+                return true;
+        }
+        std::string after_name = TD->getNameAsString();
+        std::string before_name = TD->getUnderlyingType().getAsString();
+        if(data1.count(before_name)!=0)
+        {
+            data1.insert(std::pair<std::string, std::string>(after_name, data1[before_name]));
+        }
         return true;
     }
   private:

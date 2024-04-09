@@ -61,6 +61,47 @@ std::string find_replace(const std::string& base, const std::string& token, cons
     }
     return result;
 }
+std::string type_change(std::string type_name)//去除前缀const 和 数组后缀
+{
+    int pos = type_name.find("[");
+    if (pos != std::string::npos)
+        type_name = type_name.substr(0, pos);
+    pos = type_name.find("const ");
+    if (pos == 0)
+        type_name = type_name.substr(pos + 6);
+    pos = type_name.find("_Bool");
+    while (pos != std::string::npos)
+    {
+        type_name.replace(pos, 5, "bool");
+        pos = type_name.find("_Bool");
+    }
+    return type_name;
+}
+// 获取类型，解开数组和指针和typedef
+clang::QualType getDecl_realType(clang::QualType declType)
+{
+    if (declType.getTypePtr()->isArrayType())
+    {
+        declType = clang::QualType::getFromOpaquePtr(declType.getLocalUnqualifiedType().getNonReferenceType().getTypePtr()->getArrayElementTypeNoTypeQual());
+    }
+    while (const clang::PointerType *pointerType = declType->getAs<clang::PointerType>())
+    {
+        declType = pointerType->getPointeeType(); // 放弃指针身份
+    }
+    while (const clang::TypedefType *typedefType = declType->getAs<clang::TypedefType>())
+    {
+        const clang::TypedefNameDecl *typedefDecl = typedefType->getDecl();
+        if (!typedefDecl)
+            break;
+
+        declType = typedefDecl->getUnderlyingType();
+    }
+    while (const clang::PointerType *pointerType = declType->getAs<clang::PointerType>())
+    {
+        declType = pointerType->getPointeeType();
+    }
+    return declType;
+}
 class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
 {
   public:
