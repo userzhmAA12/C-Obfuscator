@@ -294,6 +294,7 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         std::string parent_name = parent->getNameAsString();
         // std::string var_type = FD->getType().getAsString();
         if(record_name.length()==0)return true;
+        if(parent_name.length()==0)return true;
         /* if(data.count(record_name)!=0 && data[record_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
         {
             data[record_name] = "ignore";

@@ -5,60 +5,9 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <iostream>
-// #include <filesystem>
+
 #include <llvm/Support/CommandLine.h>
 
-#include <stdio.h>
-#include <dirent.h>
-#include <cstring>
-#include <sys/stat.h>
-
-// namespace fs = std::filesystem;
-
-void recursive_directory(std::string basePath)
-{
-    std::string path;
-    struct dirent *dp;
-    DIR *dir = opendir(basePath.c_str());
-
-    if (!dir) {
-        return;
-    }
-    while ((dp = readdir(dir)) != NULL) {
-        if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0) {
-            path = basePath + "/" + dp->d_name;
-
-            // 如果是目录，则递归调用自身
-            struct stat statbuf;
-            if (stat(path.c_str(), &statbuf) != -1)
-            {
-                if (S_ISDIR(statbuf.st_mode)) 
-                {
-                    recursive_directory(path);
-                } 
-                else 
-                {
-                    std::size_t lastDotPos = path.find_last_of('.');
-                    if (lastDotPos != std::string::npos)
-                    {
-                        std::string extension = path.substr(lastDotPos + 1);
-                        if ((extension == ".h" || extension == ".hh" || extension == ".hpp" || extension ==".c" || extension == ".cpp") )
-                        {
-                            size_t pos = path.find("-obfuscated");
-                            if(pos!=std::string::npos)
-                            {
-                                std::string new_file_path = path.substr(0, pos) + extension;
-                                rename(path.c_str(), new_file_path.c_str());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    closedir(dir);
-}
 
 static llvm::cl::OptionCategory MyASTSlicer_category("myastslicer options");
 static llvm::cl::extrahelp

@@ -21,7 +21,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     explicit ObfusASTVisitor(clang::ASTContext *ctx,
                             clang::Rewriter &R,
                             std::string &fn)
-        : _ctx(ctx), _rewriter(R), info_path(fn), data(), data1(), data2(), count_func(0), count_var(0)
+        : _ctx(ctx), _rewriter(R), info_path(fn), data(), data1(), data2(), data3(),count_func(0), count_var(0)
     {
         std::ifstream fin(info_path);
         if(!fin)
@@ -61,8 +61,16 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 fin >> pre_name >> belong >> after_name;
                 std::pair<std::string, std::string> tmp1(pre_name, belong);
                 std::pair<std::string, std::string> tmp2(pre_name, "struct " + belong);
-                data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp1, after_name));
-                data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp2, after_name));
+                if(data2.count(tmp1)==0)data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp1, after_name));
+                if(data2.count(tmp2)==0)data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp2, after_name));
+            }
+            else if(op == "Typedef")
+            {
+                fin >> pre_name >> after_name;
+                count_var++;
+                // data.insert(std::pair<std::string, std::string>(pre_name, after_name));
+                // data.insert(std::pair<std::string, std::string>("~"+pre_name, "~" + after_name));
+                data1.insert(std::pair<std::string, std::string>(pre_name, "struct " + after_name));
             }
             /* else if(op == "Macro")
             {
@@ -128,7 +136,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             }
         }
         clang::SourceRange T_SR = FD->getReturnTypeSourceRange();
-        if(ret_type != replace_type && _rewriter.getRewrittenText(T_SR)==ret_type)
+        if(ret_type != replace_type)
             _rewriter.ReplaceText(T_SR, replace_type); 
         return true;
     }
@@ -149,7 +157,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string var_type = VD->getType().getAsString();
         var_type = type_change(var_type);
         std::string replace_type = var_type;
-        std::cout << var_type << " " << getDecl_realType(VD->getType()).getAsString() << "\n";
+        // std::cout << var_type << " " << getDecl_realType(VD->getType()).getAsString() << "\n";
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
             std::string pre_name = it->first;
@@ -185,7 +193,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         clang::SourceLocation T_StartLoc = VD->getTypeSpecStartLoc();
         clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
         clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
-        if(var_type != replace_type && _rewriter.getRewrittenText(T_SR)==var_type)
+        if(var_type != replace_type)
             _rewriter.ReplaceText(T_SR, replace_type);
         
         return true;
@@ -243,6 +251,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(SM.isInSystemHeader(StartLoc))
             return true;
         std::string record_name = RD->getNameAsString();
+        std::cout << record_name << "\n";
         if(record_name.length()==0)return true;
         if(data1.count(record_name)==1&&data1[record_name]!="ignore")
         {
@@ -266,6 +275,14 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string var_type = FD->getType().getAsString();
         clang::RecordDecl* parent = FD->getParent();
         std::string parent_name = parent->getNameAsString();
+        if(parent_name.length()==0)
+        {
+            clang::RecordDecl* RD = FD->getParent();
+            if(data3.count(RD)!=0)
+            {
+                parent_name = data3[RD];
+            }
+        }
         // std::cout << record_name << " " << parent_name << "\n";
         if(record_name.length()==0)return true;
 
@@ -306,7 +323,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         clang::SourceLocation T_StartLoc = FD->getTypeSpecStartLoc();
         clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
         clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
-        if(var_type != replace_type && _rewriter.getRewrittenText(T_SR)==var_type)
+        if(var_type != replace_type)
             _rewriter.ReplaceText(T_SR, replace_type);
         return true;
     }
@@ -333,8 +350,16 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(clang::FieldDecl* FD = llvm::dyn_cast<clang::FieldDecl>(ME->getMemberDecl()))
         {
             parent_name = FD->getParent()->getNameAsString();
+            if(parent_name.length()==0)
+            {
+                clang::RecordDecl *RD = FD->getParent();
+                if(data3.count(RD)!=0)
+                {
+                    parent_name = data3[RD];
+                }
+            }
         }
-        
+        std::cout << parent_name << "\n";
         if (!can_obfuscate(mem_name))
         {
             return true;
@@ -465,13 +490,37 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     {
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = TD->getBeginLoc();
+
         if(SM.isInSystemHeader(StartLoc))
             return true;
+
         std::string after_name = TD->getNameAsString();
         std::string before_name = TD->getUnderlyingType().getAsString();
+        const clang::TypeSourceInfo *TInfo = TD->getTypeSourceInfo();
+        if (!TInfo)
+            return true;
+        clang::QualType QT = TInfo->getType();
+        const clang::Type *T = QT.getTypePtrOrNull();
+        if (!T)
+            return true;
+
+        // 检查类型是否为 record 类型
+        if (const clang::RecordType *RT = T->getAs<clang::RecordType>()) {
+            // 获取 record 类型对应的 recorddecl 节点
+            clang::RecordDecl *RD = RT->getDecl();
+            if (RD){
+                before_name = RD->getNameAsString();
+                if(before_name.length()==0)//是匿名结构体
+                {
+                    data3.insert(std::pair<clang::RecordDecl *, std::string>(RD, after_name));
+                }
+            }
+        }
+        std::cout << before_name << " " << after_name << "\n";
         if(data1.count(before_name)!=0)
         {
-            data1.insert(std::pair<std::string, std::string>(after_name, data1[before_name]));
+            if(data1.count(after_name)==0) 
+                data1.insert(std::pair<std::string, std::string>(after_name, data1[before_name]));
         }
         return true;
     }
@@ -480,8 +529,9 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     clang::Rewriter &_rewriter;
     std::string &info_path;
     std::map<std::string, std::string> data; //储存函数名和变量名的替换信息
-    std::map<std::string, std::string> data1;
-    std::map<std::pair<std::string, std::string>, std::string> data2;
+    std::map<std::string, std::string> data1; //储存结构体名混淆信息
+    std::map<std::pair<std::string, std::string>, std::string> data2; //储存结构体成员混淆信息
+    std::map<clang::RecordDecl*, std::string> data3; //储存匿名结构体相关信息
     int count_func;
     int count_var;
     
