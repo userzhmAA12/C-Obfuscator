@@ -66,7 +66,7 @@ int main(int argc, const char **argv)
         std::make_unique<obfuscator::ObfusFactory>(info_file);
     
     tool.run(my_factory1.get());
-    std::cout << "finish1\n";
+    // std::cout << "finish1\n";
     tool.run(my_factory2.get());
     std::cout << "[obfuscator exit]\n";
     return 0;

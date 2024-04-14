@@ -137,7 +137,18 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         }
         clang::SourceRange T_SR = FD->getReturnTypeSourceRange();
         if(ret_type != replace_type)
-            _rewriter.ReplaceText(T_SR, replace_type); 
+            _rewriter.ReplaceText(T_SR, replace_type);
+
+        if (FD->hasBody())
+        {
+            std::cout << replace_type << " " << data[func_name] << "(";
+            // 获取函数参数列表
+            for (const clang::ParmVarDecl *Param : FD->parameters())
+            {
+                std::cout << Param->getType().getAsString() << " " << Param->getNameAsString();
+            }
+            std::cout << ");\n";
+        }
         return true;
     }
 
@@ -157,7 +168,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         std::string var_type = VD->getType().getAsString();
         var_type = type_change(var_type);
         std::string replace_type = var_type;
-        // std::cout << var_type << " " << getDecl_realType(VD->getType()).getAsString() << "\n";
+        // std::cout << var_type << "\n";
+        // std::cout << getDecl_realType(VD->getType()).getAsString() <<"\n";
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
             std::string pre_name = it->first;
@@ -251,15 +263,17 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(SM.isInSystemHeader(StartLoc))
             return true;
         std::string record_name = RD->getNameAsString();
-        std::cout << record_name << "\n";
+        // std::cout << record_name << "\n";
         if(record_name.length()==0)return true;
-        if(data1.count(record_name)==1&&data1[record_name]!="ignore")
+        /* if(data1.count(record_name)==1&&data1[record_name]!="ignore")
         {
             clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(record_name.length()-1);
             clang::SourceRange SR(StartLoc, EndLoc);
             if(_rewriter.getRewrittenText(SR)==record_name)
                 _rewriter.ReplaceText(SR, data[record_name]);
-        }
+        } */
+        clang::SourceRange SR = RD->getSourceRange();
+        _rewriter.RemoveText(SR);
         return true;
     }
     bool VisitFieldDecl(clang::FieldDecl *FD) // 要处理变量类型
@@ -359,7 +373,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 }
             }
         }
-        std::cout << parent_name << "\n";
+        // std::cout << parent_name << "\n";
         if (!can_obfuscate(mem_name))
         {
             return true;
@@ -516,11 +530,32 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 }
             }
         }
-        std::cout << before_name << " " << after_name << "\n";
+        // std::cout << before_name << " " << after_name << "\n";
         if(data1.count(before_name)!=0)
         {
             if(data1.count(after_name)==0) 
                 data1.insert(std::pair<std::string, std::string>(after_name, data1[before_name]));
+        }
+        else if(before_name.length()!=0)
+        {
+            data1.insert(std::pair<std::string, std::string>(after_name, before_name));
+        }
+        clang::SourceRange SR = TD->getSourceRange();
+        _rewriter.RemoveText(SR);
+        return true;
+    }
+    bool VisitUnaryExprOrTypeTraitExpr(clang::UnaryExprOrTypeTraitExpr *UEOTTE)
+    {
+        clang::SourceManager &SM = _ctx->getSourceManager();
+        clang::SourceLocation StartLoc = UEOTTE->getArgumentTypeInfo()->getTypeLoc().getBeginLoc();
+        if(SM.isInSystemHeader(StartLoc))
+            return true;
+        std::string argu_name = UEOTTE->getArgumentType().getAsString();
+        if(data1.count(argu_name)!=0)
+        {
+            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(argu_name.length()-1);
+            clang::SourceRange SR(StartLoc, EndLoc);
+            _rewriter.ReplaceText(SR, data1[argu_name]);
         }
         return true;
     }
