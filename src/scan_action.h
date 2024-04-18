@@ -69,25 +69,25 @@ std::string type_change(std::string type_name)//去除前缀const 和 数组后�
     pos = type_name.find("const ");
     if (pos == 0)
         type_name = type_name.substr(pos + 6);
-    pos = type_name.find("_Bool");
+    /* pos = type_name.find("_Bool");
     while (pos != std::string::npos)
     {
         type_name.replace(pos, 5, "bool");
         pos = type_name.find("_Bool");
-    }
+    } */
     return type_name;
 }
 // 获取类型，解开数组和指针和typedef
 clang::QualType getDecl_realType(clang::QualType declType)
 {
-    /* if (declType.getTypePtr()->isArrayType())
+    if (declType.getTypePtr()->isArrayType())
     {
         declType = clang::QualType::getFromOpaquePtr(declType.getLocalUnqualifiedType().getNonReferenceType().getTypePtr()->getArrayElementTypeNoTypeQual());
     }
     while (const clang::PointerType *pointerType = declType->getAs<clang::PointerType>())
     {
         declType = pointerType->getPointeeType(); // 放弃指针身份
-    } */
+    }
     while (const clang::TypedefType *typedefType = declType->getAs<clang::TypedefType>())
     {
         const clang::TypedefNameDecl *typedefDecl = typedefType->getDecl();
@@ -96,10 +96,10 @@ clang::QualType getDecl_realType(clang::QualType declType)
 
         declType = typedefDecl->getUnderlyingType();
     }
-    /* while (const clang::PointerType *pointerType = declType->getAs<clang::PointerType>())
+    while (const clang::PointerType *pointerType = declType->getAs<clang::PointerType>())
     {
         declType = pointerType->getPointeeType();
-    } */
+    }
     return declType;
 }
 int getEnumValue(const clang::EnumConstantDecl *EnumConst){
@@ -264,66 +264,10 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
     }
     bool VisitRecordDecl(clang::RecordDecl *RD) //处理自定义类的类名混淆
     {
-        clang::SourceManager &SM = _ctx->getSourceManager();
-        if(SM.isInSystemHeader(RD->getLocation()))
-            return true;
-        std::string record_name = RD->getNameAsString();
-        if(record_name.length()==0)return true;
-        if (data.count(record_name)==0) {
-            ++count_var;
-            data.insert(std::pair<std::string, std::string>(RD->getNameAsString(), "ignore"));
-            data.insert(std::pair<std::string, std::string>("~"+RD->getNameAsString(), "ignore"));
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Class " << record_name << " " << "Variable" << std::to_string(count_var) << "\n";
-            fout.close();
-        }
         return true;
     }
     bool VisitFieldDecl(clang::FieldDecl *FD) 
     {
-        clang::SourceManager &SM = _ctx->getSourceManager();
-        if(SM.isInSystemHeader(FD->getLocation()))
-            return true;
-        std::string record_name = FD->getNameAsString();
-        clang::RecordDecl* parent = FD->getParent();
-        std::string parent_name = parent->getNameAsString();
-        // std::string var_type = FD->getType().getAsString();
-        if(record_name.length()==0)return true;
-        if(parent_name.length()==0)return true;
-        /* if(data.count(record_name)!=0 && data[record_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
-        {
-            data[record_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << record_name << "\n";
-            fout.close();
-            return true;
-        } */
-        
-        if (data2.count(std::pair<std::string, std::string>(record_name, parent_name))==0 && !SM.isMacroBodyExpansion(FD->getLocation()) && !SM.isMacroArgExpansion(FD->getLocation())) 
-        {
-            ++count_var;
-            std::pair<std::string, std::string> tmp(record_name, parent_name);
-            data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp, "Variable"+std::to_string(count_var)));
-            // std::cout << "var: " << record_name << " is repalced by " << "Variable" << std::to_string(count_var) << "\n";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Field " << record_name << " " << parent_name << " " << "Variable" << std::to_string(count_var) << "\n";
-            fout.close();
-        }
         return true;
     }
     bool VisitMemberExpr(clang::MemberExpr *ME) //扫描阶段如果不考虑跳宏就不用处理了
@@ -336,19 +280,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
     }
     bool VisitOffsetOfExpr(clang::OffsetOfExpr *OOE)
     {
-        std::string com_name =  OOE->getComponent(0).getFieldName()->getName().str();
-        if(data.count(com_name)==1 && data[com_name]!="ignore")
-        {
-            data[com_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << com_name << "\n";
-            fout.close();
-        }
         return true;
     }
     bool VisitInitListExpr(clang::InitListExpr *ILE)
