@@ -72,11 +72,6 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 // data.insert(std::pair<std::string, std::string>("~"+pre_name, "~" + after_name));
                 data1.insert(std::pair<std::string, std::string>(pre_name, "struct " + after_name));
             }
-            /* else if(op == "Macro")
-            {
-                fin >> pre_name;
-                data[pre_name] = "ignore";
-            } */
         }
         fin.close();
     }
@@ -89,6 +84,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         clang::SourceLocation StartLoc = FD->getLocation();
         clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
         if(SM.isInSystemHeader(StartLoc))
+            return true;
+        if(!SM.isInMainFile(StartLoc))
             return true;
         // std::cout << "Start1\n";
         std::string func_name = FD->getNameAsString();
@@ -156,11 +153,16 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 }
                 std::string p_type = Param->getType().getAsString();
                 std::string p_name = Param->getNameAsString();
-                if(data1.count(p_type)==1)
-                    p_type = data1[p_type];
+                std::string replace_type = p_type;
+                for (auto it = data1.begin(); it != data1.end(); ++it)
+                {
+                    std::string pre_name = it->first;
+                    std::string after_name = it->second;
+                    replace_type = find_replace(replace_type, pre_name, after_name);
+                }
                 if(data.count(p_name)==1)
                     p_name = data[p_name];
-                std::cout << p_type << " " << p_name;
+                std::cout << replace_type << " " << p_name;
             }
             std::cout << ");\n";
         }
@@ -272,88 +274,38 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
 
     bool VisitRecordDecl(clang::RecordDecl *RD) //处理自定义类的类名混淆
     {
-        clang::SourceManager &SM = _ctx->getSourceManager();
+        /*clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = RD->getLocation();
         if(SM.isInSystemHeader(StartLoc))
             return true;
-        std::string record_name = RD->getNameAsString();
-        // std::cout << record_name << "\n";
-        if(record_name.length()==0)return true;
-        /* if(data1.count(record_name)==1&&data1[record_name]!="ignore")
+        if(RD->isAnonymousStructOrUnion())
         {
-            clang::SourceLocation EndLoc = StartLoc.getLocWithOffset(record_name.length()-1);
-            clang::SourceRange SR(StartLoc, EndLoc);
-            if(_rewriter.getRewrittenText(SR)==record_name)
-                _rewriter.ReplaceText(SR, data[record_name]);
-        } */
-        clang::SourceRange SR = RD->getSourceRange();
-        _rewriter.RemoveText(SR);
-        return true;
+            std::cout << "in\n";
+        }
+        std::string record_name = RD->getNameAsString();
+        return true;*/
     }
     bool VisitFieldDecl(clang::FieldDecl *FD) // 要处理变量类型
     {
-        
-        clang::SourceManager &SM = _ctx->getSourceManager();
+        /* clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = FD->getLocation();
-        clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
         if(SM.isInSystemHeader(StartLoc))
             return true;
-        // std::cout << "Start4\n";
-        std::string record_name = FD->getNameAsString();
-        std::string var_type = FD->getType().getAsString();
-        clang::RecordDecl* parent = FD->getParent();
-        std::string parent_name = parent->getNameAsString();
-        if(parent_name.length()==0)
-        {
-            clang::RecordDecl* RD = FD->getParent();
-            if(data3.count(RD)!=0)
-            {
-                parent_name = data3[RD];
-            }
-        }
-        // std::cout << record_name << " " << parent_name << "\n";
-        if(record_name.length()==0)return true;
 
-        var_type = type_change(var_type);
-        std::string replace_type = var_type;
-        for (auto it = data1.begin(); it != data1.end(); ++it) 
+        clang::QualType fieldType = FD->getType();
+        const clang::RecordType *recordType = fieldType->getAsStructureType();
+        if (recordType == nullptr)
         {
-            std::string pre_name = it->first;
-            std::string after_name = it->second;
-            replace_type = find_replace(replace_type, pre_name, after_name);
+            recordType = fieldType->getAsUnionType();
         }
-        size_t pos = 0;
-        while ((pos = replace_type.find("enum ", pos)) != std::string::npos)
+        if (recordType)
         {
-            if ((pos == 0 || (!std::isalnum(replace_type[pos - 1]) && replace_type[pos - 1] != '_')))
-            {
-                size_t end = replace_type.find(" ", pos + 5);
-                if (end == std::string::npos)
-                {
-                    replace_type.replace(pos, replace_type.length() - pos, "int");
-                }
-                else
-                    replace_type.replace(pos, end - pos - 1, "int");
-            }
-            else
-            {
-                ++pos;
-            }
+            const clang::RecordDecl *recordDecl = recordType->getDecl();
+            clang::SourceLocation record_location = recordDecl->getLocation();
+            record_location.dump(SM);
+            std::cout << "1\n";
         }
-
-        if(data2.count(std::pair<std::string, std::string>(record_name, parent_name))==1 && data2[std::pair<std::string, std::string>(record_name, parent_name)]!="ignore")
-        {
-            clang::SourceLocation N_EndLoc = N_StartLoc.getLocWithOffset(record_name.length()-1);
-            clang::SourceRange SR(N_StartLoc, N_EndLoc);
-            if(_rewriter.getRewrittenText(SR)==record_name)
-                _rewriter.ReplaceText(SR, data2[std::pair<std::string, std::string>(record_name, parent_name)]);
-        }
-        clang::SourceLocation T_StartLoc = FD->getTypeSpecStartLoc();
-        clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
-        clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
-        if(var_type != replace_type)
-            _rewriter.ReplaceText(T_SR, replace_type);
-        return true;
+        return true; */
     }
     bool VisitMemberExpr(clang::MemberExpr *ME)
     {
@@ -378,6 +330,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(clang::FieldDecl* FD = llvm::dyn_cast<clang::FieldDecl>(ME->getMemberDecl()))
         {
             parent_name = FD->getParent()->getNameAsString();
+            // std::cout << parent_name << "\n";
             if(parent_name.length()==0)
             {
                 clang::RecordDecl *RD = FD->getParent();
@@ -520,9 +473,9 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
 
         if(SM.isInSystemHeader(StartLoc))
             return true;
-
         std::string after_name = TD->getNameAsString();
         std::string before_name = TD->getUnderlyingType().getAsString();
+        // std::cout << after_name << " " << before_name << "\n";
         const clang::TypeSourceInfo *TInfo = TD->getTypeSourceInfo();
         if (!TInfo)
             return true;

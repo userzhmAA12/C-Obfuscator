@@ -178,19 +178,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
             return true;
         std::string func_name = FD->getNameAsString();
         if(func_name.length()==0)return true;
-        if(data.count(func_name) != 0 && data[func_name]!="ignore" && (SM.isMacroBodyExpansion(FD->getLocation()) || SM.isMacroArgExpansion(FD->getLocation())))
-        {
-            data[func_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << func_name << "\n";
-            fout.close();
-            return true;
-        }
         
         if (!can_obfuscate(func_name))
         {
@@ -226,20 +213,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
         std::string var_type = VD->getType().getAsString();
         // std::cout << var_type << "\n";
         if(var_name.length()==0)return true;
-        if(data.count(var_name)!=0 && data[var_name]!="ignore" && (SM.isMacroBodyExpansion(VD->getLocation()) || SM.isMacroArgExpansion(VD->getLocation())))
-        {
-            data[var_name] = "ignore";
-            std::ofstream fout(info_path, std::ios::app);
-            if(!fout)
-            {   
-                std::cout << "[error]open file:" << info_path << " failed!\n";
-                exit(-1);
-            }
-            fout << "Macro " << var_name << "\n";
-            fout.close();
-            return true;
-        }
-        
         
         if(data.count(var_name)==0 && !SM.isMacroBodyExpansion(VD->getLocation()) && !SM.isMacroArgExpansion(VD->getLocation()))
         {
@@ -288,7 +261,6 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
     }
     bool VisitEnumDecl(clang::EnumDecl *ED)
     {
-
         return true;
     }
   private:
