@@ -20,8 +20,9 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
   public:
     explicit ObfusASTVisitor(clang::ASTContext *ctx,
                             clang::Rewriter &R,
-                            std::string &fn)
-        : _ctx(ctx), _rewriter(R), info_path(fn), data(), data1(), data2(), data3(),count_func(0), count_var(0)
+                            std::string &fn1,
+                            std::string &fn2)
+        : _ctx(ctx), _rewriter(R), info_path(fn1), func_path(fn2), data(), data1(), data2(), data3(),count_func(0), count_var(0), flag(false)
     {
         std::ifstream fin(info_path);
         if(!fin)
@@ -64,6 +65,14 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 if(data2.count(tmp1)==0)data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp1, after_name));
                 if(data2.count(tmp2)==0)data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp2, after_name));
             }
+            else if(op == "Anonymous")
+            {
+                std::string belong1, belong2; //belong1是最近的有名结构体名，belong2是匿名结构体的第一个变量实例名
+                fin >> pre_name >> belong1 >> belong2 >> after_name;
+                std::string belong = belong1 + " " + belong2;
+                std::pair<std::string, std::string> tmp(pre_name, belong);
+                if(data2.count(tmp)==0)data2.insert(std::pair<std::pair<std::string, std::string>, std::string>(tmp, after_name));
+            }
             else if(op == "Typedef")
             {
                 fin >> pre_name >> after_name;
@@ -80,6 +89,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     {
         
         // skip the function from included file
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = FD->getLocation();
         clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
@@ -138,7 +149,13 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
 
         if (FD->hasBody())
         {
-            std::cout << replace_type << " " << data[func_name] << "(";
+            std::ofstream fout(func_path, std::ios::app);
+            if(!fout)
+            {   
+                std::cout << "[error]open file:" << func_path << " failed!\n";
+                exit(-1);
+            }
+            fout << replace_type << " " << data[func_name] << "(";
             bool flag = false;
             // 获取函数参数列表
             for (const clang::ParmVarDecl *Param : FD->parameters())
@@ -149,7 +166,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 }
                 else
                 {
-                    std::cout << ", ";
+                    fout << ", ";
                 }
                 std::string p_type = Param->getType().getAsString();
                 std::string p_name = Param->getNameAsString();
@@ -162,16 +179,18 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                 }
                 if(data.count(p_name)==1)
                     p_name = data[p_name];
-                std::cout << replace_type << " " << p_name;
+                fout << replace_type << " " << p_name;
             }
-            std::cout << ");\n";
+            fout << ");\n";
+            fout.close();
         }
         return true;
     }
 
     bool VisitVarDecl(clang::VarDecl *VD) //处理变量名混淆，要处理变量类型
     {
-        
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = VD->getLocation();
         clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
@@ -181,11 +200,18 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         
         
         std::string var_name = VD->getNameAsString();
-        std::string replace_name = var_name;
-        std::string var_type = VD->getType().getAsString();
+        clang::QualType QT = VD->getType();
+        std::string var_type = QT.getAsString();
+        if(const clang::TypedefType* TT = QT->getAs<clang::TypedefType>())
+        {
+            clang::TypedefDecl *Typedef= clang::dyn_cast<clang::TypedefDecl>(TT->getDecl());
+            if(isFunctionPointerTypedef(Typedef))
+                return true;
+            
+        }
         var_type = type_change(var_type);
         std::string replace_type = var_type;
-        // std::cout << var_type << "\n";
+        // std::cout << var_name << " " << var_type << "\n";
         // std::cout << getDecl_realType(VD->getType()).getAsString() <<"\n";
         for (auto it = data1.begin(); it != data1.end(); ++it) 
         {
@@ -218,7 +244,6 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
             if(_rewriter.getRewrittenText(SR)==var_name)
                 _rewriter.ReplaceText(SR, data[var_name]);
         }
-
         clang::SourceLocation T_StartLoc = VD->getTypeSpecStartLoc();
         clang::SourceLocation T_EndLoc = T_StartLoc.getLocWithOffset(var_type.length()-1);
         clang::SourceRange T_SR(T_StartLoc, T_EndLoc);
@@ -228,7 +253,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     }
     bool VisitDeclRefExpr(clang::DeclRefExpr* DRE) 
     {
-        
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = DRE->getLocation();
         clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
@@ -274,24 +300,16 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
 
     bool VisitRecordDecl(clang::RecordDecl *RD) //处理自定义类的类名混淆
     {
-        /*clang::SourceManager &SM = _ctx->getSourceManager();
-        clang::SourceLocation StartLoc = RD->getLocation();
-        if(SM.isInSystemHeader(StartLoc))
-            return true;
-        if(RD->isAnonymousStructOrUnion())
-        {
-            std::cout << "in\n";
-        }
-        std::string record_name = RD->getNameAsString();
-        return true;*/
+        return true;
     }
     bool VisitFieldDecl(clang::FieldDecl *FD) // 要处理变量类型
     {
-        /* clang::SourceManager &SM = _ctx->getSourceManager();
+        if(!flag)
+            return true;
+        clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = FD->getLocation();
         if(SM.isInSystemHeader(StartLoc))
             return true;
-
         clang::QualType fieldType = FD->getType();
         const clang::RecordType *recordType = fieldType->getAsStructureType();
         if (recordType == nullptr)
@@ -300,16 +318,39 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         }
         if (recordType)
         {
-            const clang::RecordDecl *recordDecl = recordType->getDecl();
-            clang::SourceLocation record_location = recordDecl->getLocation();
-            record_location.dump(SM);
-            std::cout << "1\n";
+            const clang::RecordDecl *RD = recordType->getDecl();
+            // std::cout << FD->getNameAsString() << "\n";
+            if (data3.count(RD) == 0)
+            {
+                const clang::DeclContext *parent = RD->getParent();
+                while (parent)
+                {
+                    if (clang::isa<clang::RecordDecl>(parent))
+                    {
+                        const clang::RecordDecl *N_RD = llvm::dyn_cast<clang::RecordDecl>(parent);
+                        std::string tmp_name = N_RD->getNameAsString();
+                        if(data3.count(N_RD)!=0)
+                        {
+                            tmp_name = data3[N_RD];
+                        }
+                        if (!tmp_name.empty())
+                        {
+                            std::string alias = tmp_name + " " + FD->getNameAsString();
+                            // std::cout << alias << "\n";
+                            data3.insert(std::pair<const clang::RecordDecl *, std::string>(RD, alias));
+                            break;
+                        }
+                    }
+                    parent = parent->getParent();
+                }
+            }
         }
-        return true; */
+        return true;
     }
     bool VisitMemberExpr(clang::MemberExpr *ME)
     {
-        
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = ME->getMemberLoc();
         clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
@@ -330,7 +371,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         if(clang::FieldDecl* FD = llvm::dyn_cast<clang::FieldDecl>(ME->getMemberDecl()))
         {
             parent_name = FD->getParent()->getNameAsString();
-            // std::cout << parent_name << "\n";
+            // 
             if(parent_name.length()==0)
             {
                 clang::RecordDecl *RD = FD->getParent();
@@ -339,6 +380,7 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
                     parent_name = data3[RD];
                 }
             }
+            // std::cout << FD->getNameAsString() << " " << parent_name << "\n";
         }
         if (!can_obfuscate(mem_name))
         {
@@ -355,7 +397,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     }
     bool VisitCXXConstructorDecl(clang::CXXConstructorDecl *CCD)
     {
-        
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(CCD->getLocation()))
             return true;
@@ -388,7 +431,8 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     }
     bool VisitInitListExpr(clang::InitListExpr *ILE)
     {
-        
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         if(SM.isInSystemHeader(ILE->getBeginLoc()))
             return true;
@@ -425,6 +469,9 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     }
     bool VisitCStyleCastExpr(clang::CStyleCastExpr *CSCE) // 处理C风格强制类型转换
     {
+
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = CSCE->getBeginLoc();
         clang::SourceLocation N_StartLoc = SM.getSpellingLoc(StartLoc);
@@ -468,50 +515,109 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
     }
     bool VisitTypedefDecl(clang::TypedefDecl *TD)
     {
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = TD->getBeginLoc();
 
         if(SM.isInSystemHeader(StartLoc))
             return true;
-        std::string after_name = TD->getNameAsString();
-        std::string before_name = TD->getUnderlyingType().getAsString();
-        // std::cout << after_name << " " << before_name << "\n";
-        const clang::TypeSourceInfo *TInfo = TD->getTypeSourceInfo();
-        if (!TInfo)
-            return true;
-        clang::QualType QT = TInfo->getType();
-        const clang::Type *T = QT.getTypePtrOrNull();
-        if (!T)
-            return true;
 
-        // 检查类型是否为 record 类型
-        if (const clang::RecordType *RT = T->getAs<clang::RecordType>()) {
-            // 获取 record 类型对应的 recorddecl 节点
-            clang::RecordDecl *RD = RT->getDecl();
-            if (RD){
-                before_name = RD->getNameAsString();
-                if(before_name.length()==0)//是匿名结构体
+        clang::QualType TypedefType = TD->getUnderlyingType();
+        if (TypedefType->isFunctionPointerType()) //函数指针typedef
+        {
+            if (const auto *FunctionPointerType = TypedefType->getAs<clang::PointerType>())
+            {
+                const auto *FunctionType = FunctionPointerType->getPointeeType()->getAs<clang::FunctionProtoType>();
+                if (!FunctionType)
+                    return true;
+                std::string s = "typedef ";
+                std::string ret_type = FunctionType->getReturnType().getAsString();
+                ret_type = type_change(ret_type);
+                std::string replace_type = ret_type;
+                for (auto it = data1.begin(); it != data1.end(); ++it)
                 {
-                    data3.insert(std::pair<clang::RecordDecl *, std::string>(RD, after_name));
+                    std::string pre_name = it->first;
+                    std::string after_name = it->second;
+                    replace_type = find_replace(replace_type, pre_name, after_name);
                 }
+                s += replace_type + " (*";
+
+                s += TD->getNameAsString() + ")(";
+                bool f_t = false;
+                for (const auto &Param : FunctionType->param_types())
+                {
+                    if (f_t)
+                        s += ",";
+                    else
+                        f_t = true;
+                    std::string param_type = Param.getAsString();
+                    param_type = type_change(param_type);
+                    std::string replace_type = param_type;
+                    for (auto it = data1.begin(); it != data1.end(); ++it)
+                    {
+                        std::string pre_name = it->first;
+                        std::string after_name = it->second;
+                        replace_type = find_replace(replace_type, pre_name, after_name);
+                    }
+                    s += replace_type;
+                }
+                s += ")";
+                // std::cout << s << "\n";
+                clang::SourceRange SR = TD->getSourceRange();
+                /*SR.dump(SM);
+                std::cout << _rewriter.getRewrittenText(SR) << "\n";
+                _rewriter.RemoveText(SR);
+                _rewriter.ReplaceText(SR, s);*/
             }
         }
-        // std::cout << before_name << " " << after_name << "\n";
-        if(data1.count(before_name)!=0)
+        else
         {
-            if(data1.count(after_name)==0) 
-                data1.insert(std::pair<std::string, std::string>(after_name, data1[before_name]));
+            std::string after_name = TD->getNameAsString();
+            std::string before_name = TD->getUnderlyingType().getAsString();
+            // std::cout << after_name << " " << before_name << "\n";
+            const clang::TypeSourceInfo *TInfo = TD->getTypeSourceInfo();
+            if (!TInfo)
+                return true;
+            clang::QualType QT = TInfo->getType();
+            const clang::Type *T = QT.getTypePtrOrNull();
+            if (!T)
+                return true;
+
+            // 检查类型是否为 record 类型
+            if (const clang::RecordType *RT = T->getAs<clang::RecordType>())
+            {
+                // 获取 record 类型对应的 recorddecl 节点
+                const clang::RecordDecl *RD = RT->getDecl();
+                if (RD)
+                {
+                    before_name = RD->getNameAsString();
+                    if (before_name.length() == 0) // 是匿名结构体
+                    {
+                        if (data3.count(RD) == 0)
+                            data3.insert(std::pair<const clang::RecordDecl *, std::string>(RD, after_name));
+                    }
+                }
+            }
+            // std::cout << before_name << " " << after_name << "\n";
+            if (data1.count(before_name) != 0)
+            {
+                if (data1.count(after_name) == 0)
+                    data1.insert(std::pair<std::string, std::string>(after_name, data1[before_name]));
+            }
+            else if (before_name.length() != 0)
+            {
+                data1.insert(std::pair<std::string, std::string>(after_name, before_name));
+            }
+            clang::SourceRange SR = TD->getSourceRange();
+            // _rewriter.RemoveText(SR);
         }
-        else if(before_name.length()!=0)
-        {
-            data1.insert(std::pair<std::string, std::string>(after_name, before_name));
-        }
-        clang::SourceRange SR = TD->getSourceRange();
-        _rewriter.RemoveText(SR);
         return true;
     }
     bool VisitUnaryExprOrTypeTraitExpr(clang::UnaryExprOrTypeTraitExpr *UEOTTE)
     {
+        if(!flag)
+            return true;
         clang::SourceManager &SM = _ctx->getSourceManager();
         clang::SourceLocation StartLoc = UEOTTE->getArgumentTypeInfo()->getTypeLoc().getBeginLoc();
         if(SM.isInSystemHeader(StartLoc))
@@ -527,17 +633,22 @@ class ObfusASTVisitor : public clang::RecursiveASTVisitor<ObfusASTVisitor>
         }
         return true;
     }
+    void setFlag()
+    {
+        flag = true;
+    }
   private:
     clang::ASTContext *_ctx;
     clang::Rewriter &_rewriter;
     std::string &info_path;
+    std::string &func_path;
     std::map<std::string, std::string> data; //储存函数名和变量名的替换信息
     std::map<std::string, std::string> data1; //储存结构体名混淆信息
     std::map<std::pair<std::string, std::string>, std::string> data2; //储存结构体成员混淆信息
-    std::map<clang::RecordDecl*, std::string> data3; //储存匿名结构体相关信息
+    std::map<const clang::RecordDecl*, std::string> data3; //储存匿名结构体相关信息
     int count_func;
     int count_var;
-    
+    bool flag;
 };
 
 class ObfusASTConsumer : public clang::ASTConsumer
@@ -545,8 +656,9 @@ class ObfusASTConsumer : public clang::ASTConsumer
   public:
     explicit ObfusASTConsumer(clang::ASTContext *ctx,
                              clang::Rewriter &R,
-                             std::string &fn)
-        : _visitor(ctx, R, fn)
+                             std::string &fn1,
+                             std::string &fn2)
+        : _visitor(ctx, R, fn1, fn2)
     {
         // std::cout << "gouzao FuncASTConsumer\n";
     }
@@ -555,6 +667,8 @@ class ObfusASTConsumer : public clang::ASTConsumer
     {
         // llvm::errs()
         //     << "in function FuncASTConsumer::HandleTranslationUnit()\n";
+        _visitor.TraverseDecl(ctx.getTranslationUnitDecl());
+        _visitor.setFlag();
         _visitor.TraverseDecl(ctx.getTranslationUnitDecl());
     }
 
@@ -565,7 +679,7 @@ class ObfusASTConsumer : public clang::ASTConsumer
 class ObfusFrontendAction : public clang::ASTFrontendAction
 {
   public:
-    ObfusFrontendAction(std::string &fn) : info_path{ fn }
+    ObfusFrontendAction(std::string &fn1, std::string &fn2) : info_path{ fn1 }, func_path { fn2 }
     {
         // std::cout << "构造函数 my frontend action\n ";
     }
@@ -581,7 +695,7 @@ class ObfusFrontendAction : public clang::ASTFrontendAction
         // std::cout << "after compiler.getASTContext()\n";
 
         return std::make_unique<ObfusASTConsumer>(
-            &compiler.getASTContext(), _rewriter, info_path);
+            &compiler.getASTContext(), _rewriter, info_path, func_path);
     }
 
     void EndSourceFileAction() override
@@ -620,19 +734,21 @@ class ObfusFrontendAction : public clang::ASTFrontendAction
   private:
     clang::Rewriter _rewriter;
     std::string &info_path;
+    std::string &func_path;
 };
 
 class ObfusFactory : public clang::tooling::FrontendActionFactory
 {
   public:
-    ObfusFactory(std::string &fn) : info_path{ fn } {}
+    ObfusFactory(std::string &fn1, std::string &fn2) : info_path{ fn1 }, func_path{ fn2 } {}
     std::unique_ptr<clang::FrontendAction> create() override
     {
         // llvm::errs() << "in function FuncFactory::create()\n";
-        return std::make_unique<ObfusFrontendAction>(info_path);
+        return std::make_unique<ObfusFrontendAction>(info_path, func_path);
     }
   private:
     std::string &info_path;
+    std::string &func_path;
 };
 }
 #endif

@@ -119,6 +119,10 @@ static std::string get_stmt_string(const clang::Stmt *S)
     S->printPretty(strout, nullptr, clang::PrintingPolicy(LO));
     return strout.str();
 }
+bool isFunctionPointerTypedef(const clang::TypedefDecl *TD) {
+    clang::QualType type = TD->getUnderlyingType();
+    return type->isFunctionPointerType();
+}
 class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
 {
   public:
@@ -263,6 +267,9 @@ class ScanASTVisitor : public clang::RecursiveASTVisitor<ScanASTVisitor>
     {
         return true;
     }
+    bool VisitTypedefDecl(clang::TypedefDecl *Typedef){
+        return true;
+    }
   private:
     clang::ASTContext *_ctx;
     clang::Rewriter &_rewriter;
@@ -290,7 +297,7 @@ class ScanASTConsumer : public clang::ASTConsumer
     {
         // llvm::errs()
         //     << "in function FuncASTConsumer::HandleTranslationUnit()\n";
-        _visitor.TraverseDecl(ctx.getTranslationUnitDecl());
+        _visitor.TraverseDecl(ctx.getTranslationUnitDecl());\
     }
 
   private:

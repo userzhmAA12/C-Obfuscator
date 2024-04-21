@@ -58,12 +58,12 @@ int main(int argc, const char **argv)
     // std::make_unique<astslicer::FuncFactory>(func_info);
 
     // std::cout << "** befor tool.run()!!!\n";
-    std::string info_file = argv[argc - 1];
-
+    std::string info_file = argv[argc - 2];
+    std::string func_file = argv[argc - 1];
     std::unique_ptr<obfuscator::ScanFactory> my_factory1 =
         std::make_unique<obfuscator::ScanFactory>(info_file);
     std::unique_ptr<obfuscator::ObfusFactory> my_factory2 =
-        std::make_unique<obfuscator::ObfusFactory>(info_file);
+        std::make_unique<obfuscator::ObfusFactory>(info_file, func_file);
     
     tool.run(my_factory1.get());
     // std::cout << "finish1\n";
